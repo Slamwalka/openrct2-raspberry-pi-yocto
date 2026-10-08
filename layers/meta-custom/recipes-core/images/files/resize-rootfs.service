@@ -1,0 +1,12 @@
+[Unit]
+Description=Resize rootfs to fill partition
+After=local-fs.target
+ConditionPathExists=!/var/run/resize-done
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "parted -s /dev/mmcblk0 resizepart 2 && resize2fs /dev/mmcblk0p2 && touch /var/run/resize-done"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

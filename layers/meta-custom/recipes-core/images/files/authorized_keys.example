@@ -1,0 +1,2 @@
+# Optional: add one SSH public key per line before building the image.
+# Lines beginning with # are ignored by firstboot-user-setup.

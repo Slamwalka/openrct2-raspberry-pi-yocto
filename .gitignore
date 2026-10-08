@@ -1,0 +1,31 @@
+# Local Yocto build output
+build/
+downloads/
+sstate-cache/
+
+# Copyrighted/licensed game data: generate locally with prepare-build-assets.sh
+layers/meta-custom/recipes-games/openrct2/files/rct-game-data.tar.gz
+layers/meta-custom/recipes-games/openrct2/files/openrct2-official-objects.tar.gz
+
+# Local keys and generated images/packages
+*.wic
+*.wic.bz2
+*.ext4
+*.ipk
+*.img
+layers/meta-custom/recipes-core/images/files/authorized_keys
+*.confidential
+*.pem
+*.private
+
+# Editor/OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+layers/bitbake/
+layers/openembedded-core/
+layers/meta-yocto/
+layers/meta-raspberrypi/
+layers/meta-openembedded/
+layers/meta-qt6/

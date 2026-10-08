@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenRCT2 Server
+After=network-online.target remote-fs.target rpi-firstboot-user-setup.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openrct2
+Environment=HOME=/home/openrct2
+Environment=XDG_RUNTIME_DIR=/tmp/runtime-openrct2
+ExecStart=/usr/bin/openrct2-autosave-start.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

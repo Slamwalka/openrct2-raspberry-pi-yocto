@@ -1,0 +1,2 @@
+# Optional: place one SSH public key per line in build/local-assets/authorized_keys.example.
+# Lines beginning with # are ignored. Never put a private key in this file.

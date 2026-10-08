@@ -1,0 +1,21 @@
+[Unit]
+Description=Interactive first-boot user setup
+After=local-fs.target
+Before=sshd.socket sshd.service getty@tty1.service
+ConditionPathExists=!/var/lib/rpi-firstboot/user-configured
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/rpi-firstboot-user-setup
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal+console
+TTYPath=/dev/console
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=no
+TimeoutStartSec=infinity
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
