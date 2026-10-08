@@ -50,6 +50,8 @@ bitbake rpi-openrct2
 
 Das kann beim ersten Mal laenger dauern und viele Gigabyte Downloads/Build-Ausgabe erzeugen. Das fertige Image liegt in `build/tmp/deploy/images/raspberrypi4-64/`.
 
+Das Image installiert `fontconfig-utils` und DejaVu Sans. Die SSH-Konfiguration setzt `LANG` und `LC_CTYPE` fuer Remote-Programme auf `C.UTF-8`. So erhalten Qt-Anwendungen eine UTF-8-Locale und gaengige Zeichen wie deutsche Umlaute koennen korrekt dargestellt werden.
+
 Ein Qt-Entwicklungs-SDK fuer den Build-PC wird separat gebaut:
 
 ```sh

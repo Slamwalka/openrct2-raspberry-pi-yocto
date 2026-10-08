@@ -5,6 +5,7 @@ PasswordAuthentication yes
 PubkeyAuthentication yes
 ChallengeResponseAuthentication no
 UsePAM no
+SetEnv LANG=C.UTF-8 LC_CTYPE=C.UTF-8
 X11Forwarding yes
 X11DisplayOffset 10
 XAuthLocation /usr/bin/xauth

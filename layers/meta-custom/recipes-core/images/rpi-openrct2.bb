@@ -29,6 +29,8 @@ IMAGE_INSTALL:append = " \
     qtserialport \
     qttools \
     qttranslations \
+    fontconfig-utils \
+    ttf-dejavu-sans \
     sudo \
     shadow \
     rpi-firstboot-user-setup \
