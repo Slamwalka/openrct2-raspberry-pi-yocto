@@ -4,6 +4,8 @@
 
 Der Server wird in der öffentlichen Liste angezeigt. Seine `config.ini` verwendet `known_keys_only = false` und ein leeres `default_password`. Neue Spieler muessen also nicht vorher eingetragen werden und brauchen kein gemeinsames Passwort.
 
+Der beworbene Name ist `{OUTLINE}{TOPAZ}RPI {YELLOW}OPENRCT2 {BABYBLUE}PARK`, die Beschreibung `Raspberry Pi 4 | OpenRCT2 Community`. OpenRCT2 0.5.5 unterstuetzt Farben und Umriss, aber keinen eigenen Bold-Tag.
+
 ## Rechte neuer Spieler
 
 Neue Spieler erhalten die in `groups.json` festgelegte Standardgruppe `Normal User` (Gruppe 3). Sie koennen chatten, den Park bauen und bearbeiten, Fahrgeschaefte, Wege, Landschaft, Gaeste und Personal verwalten. Admin-, Kick-, Gruppenverwaltungs- und Cheat-Rechte bleiben anderen Gruppen vorbehalten.
