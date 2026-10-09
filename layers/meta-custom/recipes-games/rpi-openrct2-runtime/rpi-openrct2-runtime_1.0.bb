@@ -6,6 +6,7 @@ SRC_URI = " \
     file://openrct2-autosave-start.sh \
     file://openrct2.service \
     file://openrct2-config.ini \
+    file://openrct2-groups.json \
 "
 
 inherit systemd
@@ -25,10 +26,12 @@ do_install() {
 
     install -d ${D}${sysconfdir}/skel/.config/OpenRCT2
     install -m 0644 ${UNPACKDIR}/openrct2-config.ini ${D}${sysconfdir}/skel/.config/OpenRCT2/config.ini
+    install -m 0644 ${UNPACKDIR}/openrct2-groups.json ${D}${sysconfdir}/skel/.config/OpenRCT2/groups.json
 }
 
 FILES:${PN} = " \
     ${bindir}/openrct2-autosave-start.sh \
     ${systemd_system_unitdir}/openrct2.service \
     ${sysconfdir}/skel/.config/OpenRCT2/config.ini \
+    ${sysconfdir}/skel/.config/OpenRCT2/groups.json \
 "

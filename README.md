@@ -55,6 +55,8 @@ Das Skript ohne Optionen baut bei einer neuen stabilen Version die benoetigten P
 
 Eine allgemeine Anleitung zum Installieren einzelner IPK-Pakete ohne Neu-Flashen steht in [`docs/PACKAGE-UPDATES.md`](docs/PACKAGE-UPDATES.md).
 
+Zugang, Standardrechte und die Meldung „Keine Berechtigung“ erklaert [`docs/SERVER-ACCESS.md`](docs/SERVER-ACCESS.md).
+
 ## Layer-Versionen
 
 `sources.lock` enthaelt die getesteten Git-Commits von BitBake und allen benoetigten Yocto-Layern. Aenderungen an diesen Pins sollten zusammen getestet werden. Details zu Setup, Spieldaten, SDK und Flashen stehen in [`docs/BUILD.md`](docs/BUILD.md).
