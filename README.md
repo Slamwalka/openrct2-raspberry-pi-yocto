@@ -53,6 +53,8 @@ layers/meta-custom/recipes-games/openrct2/update-openrct2.sh --check
 
 Das Skript ohne Optionen baut bei einer neuen stabilen Version die benoetigten Pakete, installiert sie auf dem Pi und startet ihn neu. Vorher bitte `--help` lesen. Mit `--pi benutzer@host` laesst sich das SSH-Ziel aendern.
 
+Eine allgemeine Anleitung zum Installieren einzelner IPK-Pakete ohne Neu-Flashen steht in [`docs/PACKAGE-UPDATES.md`](docs/PACKAGE-UPDATES.md).
+
 ## Layer-Versionen
 
 `sources.lock` enthaelt die getesteten Git-Commits von BitBake und allen benoetigten Yocto-Layern. Aenderungen an diesen Pins sollten zusammen getestet werden. Details zu Setup, Spieldaten, SDK und Flashen stehen in [`docs/BUILD.md`](docs/BUILD.md).
