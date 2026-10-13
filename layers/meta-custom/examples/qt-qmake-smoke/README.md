@@ -1,6 +1,6 @@
 # Qt qmake Smoke Test
 
-Kleines Qt-Core-Programm zum Testen des Yocto-Qt-SDKs fuer Raspberry Pi 4 / Cortex-A72. Es gibt Qt-Version, Zielarchitektur und Betriebssystem aus.
+Kleines Qt-Core-Programm zum Testen des Yocto-Qt-SDKs für Raspberry Pi 4 / Cortex-A72. Es gibt Qt-Version, Zielarchitektur und Betriebssystem aus.
 
 SDK laden und ausserhalb des Quellordners bauen:
 

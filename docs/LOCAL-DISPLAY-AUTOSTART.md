@@ -1,23 +1,23 @@
 # Lokaler DSI-Viewer
 
-Der DSI-Viewer ist optional und laeuft als eigener Clientprozess. Der headless Server braucht weder Xorg noch ein angeschlossenes Display. Die lokale Unit ist nicht Teil des Image-Rezepts; dadurch startet ein Pi ohne Panel weiterhin normal.
+Der DSI-Viewer ist optional und läuft als eigener Clientprozess. Der headless Server braucht weder Xorg noch ein angeschlossenes Display. Die lokale Unit ist nicht Teil des Image-Rezepts; dadurch startet ein Pi ohne Panel weiterhin normal.
 
 ## Touch und Cursor
 
-Patch `0011` blendet den Cursor nach zehn Sekunden ohne Eingabe aus. Fingerereignisse und echte Mausbuttons wecken ihn wieder; reine Positionsspruenge gelten nicht als Aktivitaet. Der Touch-Geraetestatus bleibt fuer Drag und native Doubletap-Erkennung erhalten. Patch `0013` misst das Doubletapfenster ab dem Loslassen des ersten Taps; der zweite Tap kann so als gehaltener Rechtsklick die Kamera verschieben. Nach dem Wecken wird der Bildschirmschoner nach 120 Sekunden ohne Eingabe erneut scharf.
+Patch `0011` blendet den Cursor nach zehn Sekunden ohne Eingabe aus. Fingerereignisse und echte Mausbuttons wecken ihn wieder; reine Positionssprünge gelten nicht als Aktivität. Der Touch-Gerätestatus bleibt für Drag und native Doubletap-Erkennung erhalten. Patch `0013` misst das Doubletapfenster ab dem Loslassen des ersten Taps; der zweite Tap kann so als gehaltener Rechtsklick die Kamera verschieben. Nach dem Wecken wird der Bildschirmschoner nach 120 Sekunden ohne Eingabe erneut scharf.
 
-Patches `0011` und `0013` sind im Rezept dieses GitHub-Checkouts enthalten. Touch und Cursor sind auf der Referenzhardware bestaetigt; der Doubletap-Kamerazug muss nach dem Erstellen des Images am Panel geprueft werden.
+Patches `0011` und `0013` sind im Rezept dieses GitHub-Checkouts enthalten. Touch und Cursor sind auf der Referenzhardware bestätigt; der Doubletap-Kamerazug muss nach dem Erstellen des Images am Panel geprüft werden.
 
 ## Voraussetzungen
 
 - Das DSI-Panel ist angeschlossen und wird als `DSI-1` erkannt.
 - Der OpenRCT2-Server lauscht auf `127.0.0.1:11753`.
 - Xorg, `xrandr`, `xauth` und die OpenRCT2-Datenpakete sind installiert.
-- Fuer ein kopfueber montiertes Panel muessen Build-Drehung, Xorg-Drehung und `display_rotation` zusammenpassen. Siehe [Optionale Funktionen](OPTIONAL-FEATURES.md).
+- Für ein kopfüber montiertes Panel müssen Build-Drehung, Xorg-Drehung und `display_rotation` zusammenpassen. Siehe [Optionale Funktionen](OPTIONAL-FEATURES.md).
 
 ## Startskript
 
-Lege auf dem Pi `/usr/local/sbin/openrct2-display-start` an. Das Beispiel ist fuer ein kopfueber montiertes DSI-Panel (`rotation=180`). Bei normaler Montage aendere den Wert zu `0` und verwende `xrandr --rotate normal`.
+Lege auf dem Pi `/usr/local/sbin/openrct2-display-start` an. Das Beispiel ist für ein kopfüber montiertes DSI-Panel (`rotation=180`). Bei normaler Montage ändere den Wert zu `0` und verwende `xrandr --rotate normal`.
 
 ```sh
 #!/bin/sh
@@ -152,7 +152,7 @@ gui_pid=$!
 wait "$gui_pid"
 ```
 
-Speichere das Skript und mache es ausfuehrbar:
+Speichere das Skript und mache es ausführbar:
 
 ```sh
 sudo chmod 0755 /usr/local/sbin/openrct2-display-start
@@ -194,6 +194,6 @@ sudo systemctl enable --now openrct2-display.service
 systemctl status openrct2-display.service --no-pager
 ```
 
-Fehlt das Panel, wird der Spectator uebersprungen. Der headless Server bleibt unabhaengig davon nutzbar. Die Unit ist eine lokale Geraeteeinstellung und wird nicht durch Paketupdates ueberschrieben.
+Fehlt das Panel, wird der Spectator übersprungen. Der headless Server bleibt unabhängig davon nutzbar. Die Unit ist eine lokale Geräteeinstellung und wird nicht durch Paketupdates überschrieben.
 
-VNC wird separat installiert und ausschliesslich ueber SSH erreicht. Die Schritte stehen in [OPTIONAL-FEATURES.md](OPTIONAL-FEATURES.md).
+VNC wird separat installiert und ausschliesslich über SSH erreicht. Die Schritte stehen in [OPTIONAL-FEATURES.md](OPTIONAL-FEATURES.md).

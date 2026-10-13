@@ -1,6 +1,6 @@
 # Qt-Anwendungen mit dem Yocto-SDK bauen
 
-Das optionale SDK ist fuer eigene Qt-Anwendungen gedacht. Fuer OpenRCT2 oder das Pi-Image brauchst du es nicht. Das hier beschriebene Target ist `raspberrypi4-64`/Cortex-A72 mit Qt 6.11.3.
+Das optionale SDK ist für eigene Qt-Anwendungen gedacht. Für OpenRCT2 oder das Pi-Image brauchst du es nicht. Das hier beschriebene Target ist `raspberrypi4-64`/Cortex-A72 mit Qt 6.11.3.
 
 ## SDK bauen und installieren
 
@@ -11,7 +11,7 @@ source ../layers/openembedded-core/oe-init-build-env .
 BB_NUMBER_THREADS=8 PARALLEL_MAKE="-j 4" nice -n 19 bitbake meta-toolchain-qt6
 ```
 
-Der Installer liegt unter `tmp/deploy/sdk/`. Fuehre die passende Datei mit `cortexa72` und der verwendeten Poky-Version aus und installiere sie zum Beispiel nach `~/Qt/YoctoQt6113SDK`.
+Der Installer liegt unter `tmp/deploy/sdk/`. Führe die passende Datei mit `cortexa72` und der verwendeten Poky-Version aus und installiere sie zum Beispiel nach `~/Qt/YoctoQt6113SDK`.
 
 ## SDK-Umgebung laden
 
@@ -21,9 +21,9 @@ Vor jedem Kommandozeilen-Build:
 source ~/Qt/YoctoQt6113SDK/environment-setup-cortexa72-poky-linux
 ```
 
-Das Skript muss in der aktuellen Shell geladen werden. Es setzt Cross-Compiler, Qt-Werkzeuge und Target-Sysroot. Ein Cross-Compiler baut fuer ARM64 auf dem Pi; das SDK-`qmake` laeuft dagegen als Werkzeug auf dem Linux-Build-PC. Verwende nicht das System-`qmake` des PCs und nicht `qmake` aus dem Target-Sysroot.
+Das Skript muss in der aktuellen Shell geladen werden. Es setzt Cross-Compiler, Qt-Werkzeuge und Target-Sysroot. Ein Cross-Compiler baut für ARM64 auf dem Pi; das SDK-`qmake` läuft dagegen als Werkzeug auf dem Linux-Build-PC. Verwende nicht das System-`qmake` des PCs und nicht `qmake` aus dem Target-Sysroot.
 
-`SDKTARGETSYSROOT` zeigt auf Header und Bibliotheken fuer den Pi. `CC` und `CXX` sind die Cross-Compiler. `PKG_CONFIG_SYSROOT_DIR` sorgt dafuer, dass `pkg-config` nicht versehentlich Bibliotheken des PCs verwendet. Die vom SDK gesetzten Flags nicht durch Host-Flags ersetzen.
+`SDKTARGETSYSROOT` zeigt auf Header und Bibliotheken für den Pi. `CC` und `CXX` sind die Cross-Compiler. `PKG_CONFIG_SYSROOT_DIR` sorgt dafür, dass `pkg-config` nicht versehentlich Bibliotheken des PCs verwendet. Die vom SDK gesetzten Flags nicht durch Host-Flags ersetzen.
 
 ## Qt Creator einrichten
 
@@ -34,7 +34,7 @@ source ~/Qt/YoctoQt6113SDK/environment-setup-cortexa72-poky-linux
 qtcreator
 ```
 
-Lege in **Preferences > Kits** einen Kit fuer Linux/GCC an und waehle:
+Lege in **Preferences > Kits** einen Kit für Linux/GCC an und wähle:
 
 - C-Compiler: `aarch64-poky-linux-gcc`
 - C++-Compiler: `aarch64-poky-linux-g++`
@@ -42,7 +42,7 @@ Lege in **Preferences > Kits** einen Kit fuer Linux/GCC an und waehle:
 - Qt-Version: das `qmake` unter `sysroots/x86_64-pokysdk-linux/usr/bin/`
 - Sysroot: `sysroots/cortexa72-poky-linux`
 
-Die konkreten Pfade stehen im Installationsverzeichnis des SDKs. Nicht Host-Qt, Target-qmake und Compiler aus verschiedenen SDKs mischen. Fuer Deploy ueber SSH muss der passende private Schluessel lokal im SSH-Agent oder in Qt Creator eingetragen sein; ihn nie ins Repository kopieren.
+Die konkreten Pfade stehen im Installationsverzeichnis des SDKs. Nicht Host-Qt, Target-qmake und Compiler aus verschiedenen SDKs mischen. Für Deploy über SSH muss der passende private Schlüssel lokal im SSH-Agent oder in Qt Creator eingetragen sein; ihn nie ins Repository kopieren.
 
 ## SDK testen
 
@@ -57,4 +57,4 @@ make -j2
 file qt-qmake-smoke
 ```
 
-`file` soll ein 64-Bit-ELF fuer ARM AArch64 melden. Das Programm laesst sich zum Laufzeittest per SSH auf den Pi kopieren, wenn die benoetigten Qt-Laufzeitpakete im Image installiert sind.
+`file` soll ein 64-Bit-ELF für ARM AArch64 melden. Das Programm lässt sich zum Laufzeittest per SSH auf den Pi kopieren, wenn die benötigten Qt-Laufzeitpakete im Image installiert sind.
