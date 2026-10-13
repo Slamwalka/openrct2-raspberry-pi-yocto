@@ -1,0 +1,35 @@
+Upstream-Status: Inappropriate [Pi DSI VNC coordinate mapping]
+
+--- a/src/x11vnc.h
++++ b/src/x11vnc.h
+@@ -579,3 +579,4 @@
+ extern int rotating;
++extern int rotate_pointer;
+ extern int rotating_same;
+ extern int rotating_cursors;
+--- a/src/x11vnc_defs.c
++++ b/src/x11vnc_defs.c
+@@ -143,3 +143,4 @@
+ int rotating = 0;
++int rotate_pointer = 1;
+ int rotating_same = 0;
+ int rotating_cursors = 0;
+--- a/src/x11vnc.c
++++ b/src/x11vnc.c
+@@ -3110,0 +3111,4 @@
++		if (!strcmp(arg, "-norotatepointer")) {
++			rotate_pointer = 0;
++			continue;
++		}
+--- a/src/pointer.c
++++ b/src/pointer.c
+@@ -752,3 +752,3 @@
+-	if (rotating) {
++	if (rotating && rotate_pointer) {
+ 		rotate_coords_inverse(x, y, &x, &y, -1, -1);
+ 	}
+--- a/src/help.c
++++ b/src/help.c
+@@ -3059,0 +3060,2 @@
++"-norotatepointer       Do not inverse-rotate VNC pointer coordinates.\n"
++"                       Use if the input/display stack already maps them.\n"

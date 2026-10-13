@@ -1,0 +1,110 @@
+Upstream-Status: Pending
+
+--- a/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
++++ b/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
+@@ -63,2 +63,3 @@
+     bool _pauseSaverDismissed = false;
++    bool _backlightInitialized = false;
+     bool _backlightBlanked = false;
+@@ -66,2 +67,8 @@
+     int32_t _restoreBacklightBrightness = 0;
++    int32_t _backlightCurrentBrightness = 0;
++    int32_t _backlightFadeStartBrightness = 0;
++    int32_t _backlightFadeTargetBrightness = 0;
++    std::chrono::steady_clock::time_point _backlightFadeStarted{};
++    std::chrono::steady_clock::time_point _backlightLastWrite{};
++    std::chrono::milliseconds _backlightFadeDuration{};
+     bool _spectatorTourInitialized = false;
+@@ -88,6 +95,6 @@
+     ~HardwareDisplayDrawingEngine() override
+     {
+-        SetBacklightBlanked(false);
++        SetBacklightBlanked(false, true);
+         if (_screenTexture != nullptr)
+         {
+             SDL_DestroyTexture(_screenTexture);
+@@ -275,30 +282,71 @@
+-    void SetBacklightBlanked(bool blanked)
++    void SetBacklightBlanked(bool blanked, bool immediate = false)
+     {
+         const auto& backlightPath = Config::Get().general.screenSaverBacklightPath;
+-        if (backlightPath.empty() || blanked == _backlightBlanked)
++        if (backlightPath.empty())
+         {
+             return;
+         }
+ 
+-        if (blanked)
++        const auto now = std::chrono::steady_clock::now();
++        if (!_backlightInitialized)
+         {
+             std::ifstream currentBrightness(backlightPath);
+             if (!(currentBrightness >> _restoreBacklightBrightness))
+             {
+                 return;
+             }
++            _backlightCurrentBrightness = _restoreBacklightBrightness;
++            _backlightFadeTargetBrightness = _restoreBacklightBrightness;
++            _backlightInitialized = true;
++        }
+ 
+-            std::ofstream backlight(backlightPath);
+-            if (backlight << 0)
+-            {
+-                _backlightBlanked = true;
+-            }
+-            return;
++        const auto targetBrightness = blanked ? 0 : _restoreBacklightBrightness;
++        if (targetBrightness != _backlightFadeTargetBrightness)
++        {
++            _backlightBlanked = blanked;
++            _backlightFadeStartBrightness = _backlightCurrentBrightness;
++            _backlightFadeTargetBrightness = targetBrightness;
++            _backlightFadeStarted = now;
++            _backlightFadeDuration = std::chrono::seconds(blanked ? 5 : 1);
+         }
+ 
+-        std::ofstream backlight(backlightPath);
+-        if (backlight << _restoreBacklightBrightness)
++        if (immediate)
+         {
+-            _backlightBlanked = false;
+-        }
++            std::ofstream backlight(backlightPath);
++            if (backlight << _backlightFadeTargetBrightness)
++            {
++                _backlightCurrentBrightness = _backlightFadeTargetBrightness;
++                _backlightLastWrite = now;
++            }
++            return;
++        }
++
++        if (_backlightCurrentBrightness == _backlightFadeTargetBrightness)
++        {
++            return;
++        }
++
++        const auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(_backlightFadeDuration).count();
++        const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - _backlightFadeStarted).count();
++        const bool fadeComplete = elapsedMs >= durationMs;
++        const auto nextBrightness = fadeComplete
++            ? _backlightFadeTargetBrightness
++            : _backlightFadeStartBrightness
++                + (_backlightFadeTargetBrightness - _backlightFadeStartBrightness) * elapsedMs / durationMs;
++
++        if (nextBrightness == _backlightCurrentBrightness && !fadeComplete)
++        {
++            return;
++        }
++        if (!fadeComplete && now - _backlightLastWrite < std::chrono::milliseconds(20))
++        {
++            return;
++        }
++
++        std::ofstream backlight(backlightPath);
++        if (backlight << nextBrightness)
++        {
++            _backlightCurrentBrightness = nextBrightness;
++            _backlightLastWrite = now;
++        }
+     }

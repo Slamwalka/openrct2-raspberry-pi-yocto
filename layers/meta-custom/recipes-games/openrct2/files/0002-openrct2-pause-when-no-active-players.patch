@@ -1,0 +1,30 @@
+Upstream-Status: Inappropriate [project-specific spectator pause policy]
+
+--- a/src/openrct2/GameState.cpp
++++ b/src/openrct2/GameState.cpp
+@@ -146,5 +146,22 @@
+-            // If we are headless we always have 1 player (host), pause if no one else is around.
+-            if (gOpenRCT2Headless && Network::GetNumPlayers() == 1)
+             {
+-                isPaused |= true;
++                // A local spectator must not keep a headless server running without active players.
++                if (gOpenRCT2Headless)
++                {
++                    constexpr uint8_t spectatorGroupId = 1;
++                    const auto hostPlayerId = static_cast<int32_t>(Network::GetCurrentPlayerId());
++                    bool hasActiveClient = false;
++                    const auto playerCount = static_cast<uint32_t>(Network::GetNumPlayers());
++                    for (uint32_t playerIndex = 0; playerIndex < playerCount; ++playerIndex)
++                    {
++                        if (Network::GetPlayerID(playerIndex) == hostPlayerId
++                            || Network::GetPlayerGroup(playerIndex) == spectatorGroupId)
++                        {
++                            continue;
++                        }
++
++                        hasActiveClient = true;
++                        break;
++                    }
++                    isPaused |= !hasActiveClient;
++                }
+             }

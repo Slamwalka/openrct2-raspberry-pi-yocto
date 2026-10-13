@@ -1,18 +1,37 @@
 SUMMARY = "OpenRCT2 - RollerCoaster Tycoon 2 reimplementation"
-DESCRIPTION = "Free reimplementation of RollerCoaster Tycoon 2"
-PV = "0.5.5"
+DESCRIPTION = "Free reimplementation of RollerCoaster Tycoon 2 (0.5.6)"
+PV = "0.5.6"
+OPENRCT2_DATA_VERSION = "0.5.6"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${THISDIR}/files/LICENSE;md5=3be7b8b182ccd96e48989b4e57311193"
 
 SRC_URI = "git://github.com/OpenRCT2/OpenRCT2.git;protocol=https;nobranch=1 \
+    file://0001-openrct2-add-optional-display-rotation.patch \
+    file://0002-openrct2-pause-when-no-active-players.patch \
+    file://0003-openrct2-pause-server-if-only-spectators.patch \
+    file://0004-openrct2-blank-paused-spectator.patch \
+    file://0005-openrct2-switch-off-paused-backlight.patch \
+    file://0006-openrct2-spectator-auto-tour.patch \
+    file://0007-openrct2-guard-missing-title-sequence.patch \
+    file://0008-openrct2-fade-paused-backlight.patch \
+    file://0009-openrct2-fade-paused-framebuffer.patch \
+    file://0010-openrct2-delay-rapid-rejoins.patch \
+    file://0011-openrct2-hide-idle-touch-cursor.patch \
+    file://0012-openrct2-freeze-effects-during-auto-pause.patch \
+    file://0013-openrct2-time-double-tap-from-release.patch \
     file://g2.dat \
     file://fonts.dat \
     file://palettes.dat \
     file://tracks.dat \
+    file://openrct2.parkseq \
+    file://rct1.parkseq \
+    file://rct1aa.parkseq \
+    file://rct1aall.parkseq \
+    file://rct2.parkseq \
     file://openrct2-official-objects.tar.gz;name=openrct2objects;subdir=openrct2-objects-src \
 "
-SRC_URI[openrct2objects.sha256sum] = "94de35790ee385a598babde2822d103884d999973d47031d030eec3a698adbf0"
-SRCREV = "8694e3483690323b6a75fa7264b6c58116f51f31"
+SRC_URI[openrct2objects.sha256sum] = "c0800bcaa0a328f71a1ef6a40e0057bf2e7f3cc9557df7a74e2f07825e949e76"
+SRCREV = "82b309798a83346b7f9fc61a53847f4323deb19d"
 
 inherit cmake
 
@@ -74,6 +93,11 @@ do_install() {
     install -m 0644 ${UNPACKDIR}/fonts.dat    ${D}${datadir}/openrct2/
     install -m 0644 ${UNPACKDIR}/palettes.dat ${D}${datadir}/openrct2/
     install -m 0644 ${UNPACKDIR}/tracks.dat   ${D}${datadir}/openrct2/
+
+    install -d ${D}${datadir}/openrct2/sequence
+    for sequence in openrct2.parkseq rct1.parkseq rct1aa.parkseq rct1aall.parkseq rct2.parkseq; do
+        install -m 0644 ${UNPACKDIR}/$sequence ${D}${datadir}/openrct2/sequence/
+    done
 
     cp -r ${S}/data/* ${D}${datadir}/openrct2/
     install -d ${D}${datadir}/openrct2/object

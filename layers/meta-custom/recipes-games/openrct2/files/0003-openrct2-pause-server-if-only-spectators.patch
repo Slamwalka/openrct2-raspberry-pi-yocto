@@ -1,0 +1,59 @@
+Upstream-Status: Inappropriate [project-specific spectator pause policy]
+
+--- a/src/openrct2/config/Config.h
++++ b/src/openrct2/config/Config.h
+@@ -189,6 +189,7 @@
+         bool logChat;
+         bool logServerActions;
+         bool pauseServerIfNoClients;
++        bool pauseServerIfOnlySpectators;
+         bool desyncDebugging;
+     };
+ 
+--- a/src/openrct2/config/Config.cpp
++++ b/src/openrct2/config/Config.cpp
+@@ -512,6 +512,7 @@
+             model->logChat = reader->GetBoolean("log_chat", false);
+             model->logServerActions = reader->GetBoolean("log_server_actions", false);
+             model->pauseServerIfNoClients = reader->GetBoolean("pause_server_if_no_clients", false);
++            model->pauseServerIfOnlySpectators = reader->GetBoolean("pause_server_if_only_spectators", false);
+             model->desyncDebugging = reader->GetBoolean("desync_debugging", false);
+         }
+     }
+@@ -539,6 +540,7 @@
+         writer->WriteBoolean("log_chat", model->logChat);
+         writer->WriteBoolean("log_server_actions", model->logServerActions);
+         writer->WriteBoolean("pause_server_if_no_clients", model->pauseServerIfNoClients);
++        writer->WriteBoolean("pause_server_if_only_spectators", model->pauseServerIfOnlySpectators);
+         writer->WriteBoolean("desync_debugging", model->desyncDebugging);
+     }
+ 
+--- a/src/openrct2/GameState.cpp
++++ b/src/openrct2/GameState.cpp
+@@ -141,11 +141,12 @@
+         }
+ 
+         bool isPaused = GameIsPaused();
+-        if (Network::GetMode() == Network::Mode::server && Config::Get().network.pauseServerIfNoClients)
++        if (Network::GetMode() == Network::Mode::server
++            && (Config::Get().network.pauseServerIfNoClients || Config::Get().network.pauseServerIfOnlySpectators))
+         {
++            if (gOpenRCT2Headless)
+             {
+-                // A local spectator must not keep a headless server running without active players.
+-                if (gOpenRCT2Headless)
++                if (Config::Get().network.pauseServerIfOnlySpectators)
+                 {
+                     constexpr uint8_t spectatorGroupId = 1;
+                     const auto hostPlayerId = static_cast<int32_t>(Network::GetCurrentPlayerId());
+@@ -164,6 +165,10 @@
+                     }
+                     isPaused |= !hasActiveClient;
+                 }
++                else if (Config::Get().network.pauseServerIfNoClients && Network::GetNumPlayers() == 1)
++                {
++                    isPaused |= true;
++                }
+             }
+         }
+ 

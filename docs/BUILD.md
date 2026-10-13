@@ -1,29 +1,37 @@
-# Build- und Installationsanleitung
+# Build und Installation
 
-## Build-PC vorbereiten
+Diese Anleitung gilt fuer den Build-PC. Sie beschreibt den Yocto-Build und das Schreiben des Images auf eine SD-Karte.
 
-Verwende einen aktuellen Linux-x86_64-Rechner. Fuer Debian/Ubuntu/Zorin sind mindestens diese ueblichen Yocto-Werkzeuge noetig:
+## Voraussetzungen
+
+- Referenzgeraet: Raspberry Pi 4 Model B mit 8 GB RAM und dem offiziellen Raspberry Pi Touch Display am DSI-Anschluss
+- Linux auf x86_64, kein Build als `root`
+- Git, Internetzugang und mindestens etwa 100 GB freien Speicher fuer Quellen, Downloads und Build-Ausgabe
+- Eine eigene lizenzierte RCT1-/RCT2-Installation
+- Raspberry Pi 4 mit 64-Bit-System und SD-Karte fuer den spaeteren Test
+
+Unter Debian/Ubuntu/Zorin installierst du die gaengigen Yocto-Werkzeuge so:
 
 ```sh
 sudo apt update
 sudo apt install build-essential chrpath cpio debianutils diffstat file gawk git iputils-ping jq libacl1 liblz4-tool locales python3 python3-git python3-jinja2 python3-pexpect python3-pip python3-subunit socat texinfo unzip wget xz-utils zstd curl
 ```
 
-Yocto-Versionen koennen weitere Hostpakete benoetigen. Wenn BitBake beim Start ein fehlendes Werkzeug meldet, dieses Paket ebenfalls installieren. Baue nicht als root. Plane fuer Downloads und Build-Ausgabe reichlich Platz ein; ein komplettes Qt-SDK ist deutlich groesser als das Image.
+Wenn BitBake beim Start ein weiteres fehlendes Werkzeug nennt, installiere das zugehoerige Hostpaket. Verwende kein `sudo bitbake`.
 
-## 1. Yocto-Layer einrichten
+## Yocto vorbereiten
 
-Im Repo-Stamm ausfuehren:
+Vom Stamm dieses Repositories:
 
 ```sh
 ./scripts/setup-build.sh
 ```
 
-Das Skript klont die benoetigten Repositories auf die in `sources.lock` gespeicherten Commit-IDs. Wenn ein Layer bereits existiert und lokale Aenderungen enthaelt, bricht es ab, statt diese zu ueberschreiben.
+Das Skript holt die in `sources.lock` festgelegten Layer-Commits und richtet `build/` ein. Es bricht ab, wenn ein vorhandener Layer lokale Aenderungen hat oder auf ein anderes Git-Remote zeigt; diese Pruefung schuetzt lokale Arbeit.
 
-## 2. Eigene RCT-Spieldaten vorbereiten
+## Eigene Spieldaten verpacken
 
-Verwende eine eigene lizenzierte Installation. Das Quellverzeichnis muss mindestens diese Dateien enthalten:
+Das Quellverzeichnis muss mindestens enthalten:
 
 ```text
 OpenRCT_Sys/
@@ -31,49 +39,54 @@ OpenRCT_Sys/
   RCT2/Data/g1.dat
 ```
 
-Weitere benoetigte `Data`, `ObjData`, `Scenarios` und `Tracks` werden mit eingepackt.
+Weitere benoetigte Daten, Objekte, Szenarien und Strecken werden mit aufgenommen. Erzeuge daraus die lokalen Yocto-Archive:
 
 ```sh
 ./scripts/prepare-build-assets.sh /pfad/zu/OpenRCT_Sys
 ```
 
-Das Skript erzeugt die lokalen Archive im OpenRCT2-Layer. Es laedt ausserdem die offiziellen OpenRCT2-Objekte aus dem AppImage der im Rezept eingetragenen Version und vergleicht dessen SHA-256 mit der offiziellen Release-Pruefsumme. Bei Fehlern bricht es ab.
+Das Skript laedt ausserdem das offizielle OpenRCT2-AppImage der Rezeptversion, prueft dessen SHA-256 und extrahiert die OpenRCT2-Objekte. Die erzeugten Archive sind lokal und in `.gitignore` ausgeschlossen. Lade keine Originalspieldaten oder generierten Archive nach GitHub hoch.
 
-Die Archive sind gross und enthalten lizenzierte Inhalte. Sie stehen absichtlich in `.gitignore`; nicht in GitHub hochladen.
-
-## 3. Image bauen
+## Image bauen
 
 ```sh
-cd build
-bitbake rpi-openrct2
+source layers/openembedded-core/oe-init-build-env build
+bitbake -p
+BB_NUMBER_THREADS=8 PARALLEL_MAKE="-j 4" nice -n 19 bitbake rpi-openrct2
 ```
 
-Das kann beim ersten Mal laenger dauern und viele Gigabyte Downloads/Build-Ausgabe erzeugen. Das fertige Image liegt in `build/tmp/deploy/images/raspberrypi4-64/`.
+`bitbake -p` prueft die Metadaten, ohne Pakete zu kompilieren. `BB_NUMBER_THREADS` begrenzt gleichzeitig laufende BitBake-Aufgaben; `PARALLEL_MAKE` begrenzt Compilerprozesse je Aufgabe. Die Projektkonfiguration startet konservativer mit vier Jobs. Passe die Werte an den Build-PC an und beobachte den freien Arbeitsspeicher. Bei Speicherdruck beide Werte reduzieren.
 
-Das Image installiert `fontconfig-utils` und DejaVu Sans. Die SSH-Konfiguration setzt `LANG` und `LC_CTYPE` fuer Remote-Programme auf `C.UTF-8`. So erhalten Qt-Anwendungen eine UTF-8-Locale und gaengige Zeichen wie deutsche Umlaute koennen korrekt dargestellt werden.
+Das komprimierte Image wird in `build/tmp/deploy/images/raspberrypi4-64/` abgelegt. Die Zielmaschine heisst `raspberrypi4-64`; das ist das Yocto-Machine-Profil fuer den Raspberry Pi 4 mit 64-Bit-System.
 
-Ein Qt-Entwicklungs-SDK fuer den Build-PC wird separat gebaut:
+Optionales Qt-Entwicklungs-SDK, nicht benoetigt fuer das OpenRCT2-Image:
 
 ```sh
-bitbake meta-toolchain-qt6
+BB_NUMBER_THREADS=8 PARALLEL_MAKE="-j 4" nice -n 19 bitbake meta-toolchain-qt6
 ```
 
-Den Installer findest du danach in `build/tmp/deploy/sdk/`. Die Installation und Qt-Creator-Konfiguration ist in `layers/meta-custom/docs/qtcreator-sdk.md` beschrieben.
+Der Installer liegt danach in `build/tmp/deploy/sdk/`. Die Einrichtung steht in [qtcreator-sdk.md](../layers/meta-custom/docs/qtcreator-sdk.md).
 
-## 4. Image auf die SD-Karte schreiben
+## Auf SD-Karte schreiben
 
-Waehle eine `.wic.bz2`-Datei in `build/tmp/deploy/images/raspberrypi4-64/` und schreibe sie mit einem SD-Kartenprogramm auf die Raspberry-Pi-Karte. Vorher das Zielgeraet sorgfaeltig kontrollieren: Beim Schreiben wird dessen bisheriger Inhalt geloescht.
+Das Flash-Skript schreibt das ganze Image und ueberschreibt alle Daten auf der Zielkarte. Ermittle zuerst das Geraet:
 
-## Erste Anmeldung
+```sh
+lsblk -o NAME,SIZE,MODEL,TYPE,MOUNTPOINTS
+```
 
-Beim ersten Start zeigt die lokale Systemkonsole die Benutzer-Einrichtung. Waehle dort Benutzername und Passwort. Danach ist SSH verfuegbar. Das Image bringt absichtlich keinen privaten oder persoenlichen SSH-Schluessel mit.
+Haenge die Partitionen der SD-Karte aus. Fuehre dann aus dem Build-Verzeichnis aus:
 
-`openrct2` ist der Standardbenutzer und wird auch vom OpenRCT2-Serverdienst verwendet. Wenn du bei der Einrichtung einen anderen Namen waehlst, musst du den Benutzer in `rpi-openrct2-runtime/files/openrct2.service` passend aendern.
+```sh
+../scripts/flash-image.sh tmp/deploy/images/raspberrypi4-64/<image>.wic.bz2 /dev/sdX
+```
 
-Optional kannst du nach `scripts/setup-build.sh` deinen oeffentlichen SSH-Schluessel in `build/local-assets/authorized_keys.example` eintragen. Das Build-Verzeichnis ist in `.gitignore` ausgeschlossen. Private Schluessel gehoeren niemals in dieses Repo.
+Ersetze `/dev/sdX` durch das ganze Karten-Geraet, zum Beispiel `/dev/sdb`, niemals durch eine Partition wie `/dev/sdb1`. Lies die Modell- und Groessenanzeige und bestaetige nur, wenn das Ziel eindeutig die SD-Karte ist.
 
-## Einstellungen
+## Erster Start
 
-Die projektweiten Einstellungen liegen in `conf/rpi-openrct2.conf`. Dazu gehoeren Zielgeraet, Qt-Edition, akzeptierte Lizenzkennzeichnung und eine moderate Build-Parallelitaet. Die ausgecheckten Upstream-Revisionen stehen in `sources.lock`.
+Verbinde Monitor und Tastatur oder eine serielle Konsole. Beim ersten Start legst du ein Administrationskonto an; der vorgesehene Name ist `openrct2`. Der Spielserver laeuft als eigenes systemd-Dienstkonto und startet den neuesten gespeicherten Parkstand.
 
-Die Build-Ausgabe `build/`, heruntergeladene Quellen, SDKs und Spieldaten werden nicht versioniert. Sie sind gross und lassen sich aus den gepinnten Quellen bzw. der eigenen RCT-Installation neu erzeugen.
+Wenn mDNS im Netz verfuegbar ist, ist der Pi unter `rpi-openrct2.local` erreichbar. Vor dem Build kann ein oeffentlicher SSH-Schluessel in `build/local-assets/authorized_keys.example` eingetragen werden. Private Schluessel nie in diese Datei schreiben.
+
+Weitere Build-Variablen und optionale Ausstattung stehen in [OPTIONAL-FEATURES.md](OPTIONAL-FEATURES.md).

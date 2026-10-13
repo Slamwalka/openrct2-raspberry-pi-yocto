@@ -1,62 +1,82 @@
-# Raspberry Pi OpenRCT2
+# OpenRCT2 auf dem Raspberry Pi 4 mit Yocto
 
-Dieses Projekt baut ein Yocto-System fuer den Raspberry Pi 4 (64 Bit) mit Qt 6 und OpenRCT2. Die Anleitungen sind bewusst in einfacher Sprache geschrieben.
+Dieses Projekt baut ein 64-Bit-Yocto-System fuer einen Raspberry Pi 4 Model B. Der Server laeuft ohne grafische Oberflaeche; Display, VNC, VPN und NAS-Speicher sind getrennte, teilweise optionale Funktionen.
 
-## Inhalt
+Der Rezeptstand pinnt **OpenRCT2 0.5.6** auf Commit `82b309798a83346b7f9fc61a53847f4323deb19d`.
 
-- Ein Yocto-Image mit Qt, OpenRCT2, SSH und optionalen Netzwerkwerkzeugen
-- Rezepte fuer OpenRCT2, die Originalspieldaten und den Server-Start
-- Ein Skript zum Vorbereiten eines Builds mit festgelegten Layer-Versionen
-- Eine Anleitung fuer das Qt-SDK und Qt Creator
-- Ein kleines qmake-Projekt zum Testen der Cross-Compile-Toolchain
+## Referenzhardware
 
-## Was nicht im Repo liegt
+Getestet wird auf einem **Raspberry Pi 4 Model B mit 8 GB RAM** und dem **offiziellen Raspberry Pi Touch Display** am DSI-Anschluss. Andere Pi-Modelle oder Displaygenerationen koennen zusaetzliche Anpassungen erfordern. Der optionale DSI-Viewer dient als lokale Parkansicht und **interaktiver Bilderrahmen**: Bei automatischer Serverpause dunkelt er ab; Touch oder die Rueckkehr eines aktiven Spielers wecken die Anzeige.
 
-Die originalen RCT1-/RCT2-Spieldateien sind urheberrechtlich geschuetzt. Sie muessen aus einer eigenen lizenzierten Installation stammen. Das Skript `scripts/prepare-build-assets.sh` erstellt daraus lokale Build-Dateien. Diese grossen Archive sind in `.gitignore` eingetragen und sollen nicht nach GitHub geladen werden.
+## Server und Laufzeit
 
-Private Schluessel, WireGuard-Profile und NAS-Passwoerter gehoeren ebenfalls nicht in das Repo. Die Firstboot-Keydatei enthaelt nur Kommentare. Das Image startet mit Passwortanmeldung; SSH-Schluessel koennen nach dem ersten Boot eingerichtet werden.
+Das Image installiert einen headless Mehrspielerserver mit einer konfigurierten Grenze von 64 Spielern. Wenn nur Host und Spectators (Gruppe 1) verbunden sind, pausiert die Simulation; ein aktiver Spieler setzt sie fort. Der lokale DSI-Viewer kann als Spectator beitreten und bietet Auto-Tour, Backlight-Steuerung, Inaktivitaetsabdunklung und Touchbedienung.
+
+Die Touchunterstuetzung blendet den Cursor nach Inaktivitaet aus, behaelt den Touchzustand fuer Drag bei und erkennt Doubletap-Kamera-Drag. Schnelle Wiederbeitritte desselben Schluessels erhalten eine kurze Verzoegerung.
+
+Zwei Mehrspieler-Schutzmassnahmen adressieren plausible Desync-Pfade: Waehrend automatischer Headless-Pause aktualisiert der Server MoneyEffects nicht einseitig. MoneyEffects und checksumrelevante Entitaeten teilen sich eine Entity-Freiliste, sodass asynchrone Freigaben spaetere Entity-IDs auseinanderlaufen lassen koennten. Bei einem schnellen Wiederbeitritt desselben Schluessels wartet der Server ausserdem fuenf Sekunden, wenn der vorherige Disconnect weniger als zwei Minuten zurueckliegt. Diese Massnahmen decken nicht automatisch alle Desync-Ursachen ab. Hinweise zur Diagnose und zum sicheren Betrieb: [Serverzugang und Spielerrechte](docs/SERVER-ACCESS.md).
+
+Das Rezept pinnt OpenRCT2 **0.5.6** auf Commit `82b309798a83346b7f9fc61a53847f4323deb19d`. Das GitHub-Rezept enthaelt die lokalen Yocto-Anpassungen und benoetigten Titel-Sequenzen.
 
 ## Schnellstart
 
-Voraussetzungen: Linux x86_64, Git, curl, jq, Python 3, tar/gzip, make und ausreichend freier Plattenplatz. Der erste Build laedt Yocto-Quellen herunter und benoetigt deutlich mehr Speicher als das fertige Image.
+Vorausgesetzt sind ein Linux-x86_64-Build-PC, Git, die Host-Werkzeuge aus [Build und Installation](docs/BUILD.md), eine SD-Karte sowie eigene lizenzierte RCT1-/RCT2-Daten. Ersetze `DEIN_GITHUB_OWNER` unten durch den GitHub-Benutzer oder die Organisation, unter der das Repository veroeffentlicht wird:
 
 ```sh
-git clone <GitHub-URL> rpi-openrct2
+OWNER=DEIN_GITHUB_OWNER
+git clone "https://github.com/${OWNER}/rpi-openrct2.git"
 cd rpi-openrct2
 ./scripts/setup-build.sh
-./scripts/prepare-build-assets.sh /pfad/zu/deiner/OpenRCT_Sys-Installation
-cd build
-bitbake rpi-openrct2
+./scripts/prepare-build-assets.sh /pfad/zu/OpenRCT_Sys
+source layers/openembedded-core/oe-init-build-env build
+bitbake -p
+nice -n 19 bitbake rpi-openrct2
 ```
 
-Der Ordner `OpenRCT_Sys` muss `RCT/` und `RCT2/` enthalten. Das Skript prueft insbesondere `RCT/Data/CSG1.DAT` und `RCT2/Data/g1.dat`. Es packt nur die benoetigten Spielressourcen; Spielstaende kommen nicht ins Image.
+`setup-build.sh` klont die in `sources.lock` gepinnten Yocto-Layer und richtet `build/` ein. Die gemeinsamen Projektdefaults verwenden vier BitBake-Threads und vier Compilerjobs; passe sie bei wenig RAM in `build/conf/local.conf` weiter nach unten an.
 
-Das Image erscheint unter `build/tmp/deploy/images/raspberrypi4-64/`. Das passende `*.wic.bz2`-Image mit einem SD-Kartenprogramm auf eine Karte schreiben. Achtung: Das Schreiben loescht die ausgewaehlte SD-Karte.
+Die Assets muessen mindestens `RCT/Data/CSG1.DAT` und `RCT2/Data/g1.dat` enthalten. Das Skript packt die benoetigten Spieldaten lokal und prueft die offiziellen OpenRCT2-Objekte anhand der Release-Pruefsumme. Lizenzierte Daten und gebaute Images werden nicht in Git gespeichert.
 
-## Erster Start
-
-Verbinde Bildschirm und Tastatur oder eine serielle Konsole. Beim ersten Start fragt die Einrichtung nach Benutzername und Passwort. `openrct2` ist der Standardbenutzer und passt zum Serverdienst; wenn du einen anderen Namen waehlst, musst du auch den systemd-Dienst anpassen. Danach kannst du dich per SSH anmelden.
-
-Optional kannst du nach `scripts/setup-build.sh` deinen SSH-Public-Key in `build/local-assets/authorized_keys.example` eintragen. Diese Datei liegt im ignorierten Build-Ordner und wird nicht mit Git geteilt. Nur den Public Key eintragen, niemals den privaten Schluessel.
-
-Die Beispielkonfiguration erlaubt Passwort-SSH und ist fuer ein vertrauenswuerdiges LAN/VPN gedacht. Oeffne SSH nicht direkt ins Internet, bevor du die Anmeldung abgesichert hast. WireGuard-Schluessel und Tunnelprofile muessen separat und privat eingerichtet werden.
-
-## Qt und qmake
-
-Die installierte Yocto-SDK-Umgebung und die Einstellungen fuer Qt Creator stehen in [`layers/meta-custom/docs/qtcreator-sdk.md`](layers/meta-custom/docs/qtcreator-sdk.md). Das Projekt [`qt-qmake-smoke`](layers/meta-custom/examples/qt-qmake-smoke/README.md) wurde fuer AArch64 gebaut und auf dem Pi ausgefuehrt.
-
-## OpenRCT2 aktualisieren
+Das Image liegt unter `build/tmp/deploy/images/raspberrypi4-64/`. Das Flashen loescht den gesamten Ziel-Datentraeger:
 
 ```sh
-layers/meta-custom/recipes-games/openrct2/update-openrct2.sh --check
+cd build
+../scripts/flash-image.sh tmp/deploy/images/raspberrypi4-64/<image>.wic.bz2 /dev/sdX
 ```
 
-Das Skript ohne Optionen baut bei einer neuen stabilen Version die benoetigten Pakete, installiert sie auf dem Pi und startet ihn neu. Vorher bitte `--help` lesen. Mit `--pi benutzer@host` laesst sich das SSH-Ziel aendern.
+Ersetze `/dev/sdX` durch das ganze SD-Kartengeraet, nicht durch eine Partition. Das Skript zeigt das Geraet an und verlangt eine genaue Bestaetigung. Pruefe den Namen mit `lsblk`.
 
-Eine allgemeine Anleitung zum Installieren einzelner IPK-Pakete ohne Neu-Flashen steht in [`docs/PACKAGE-UPDATES.md`](docs/PACKAGE-UPDATES.md).
+## Erste Anmeldung
 
-Zugang, Standardrechte und die Meldung „Keine Berechtigung“ erklaert [`docs/SERVER-ACCESS.md`](docs/SERVER-ACCESS.md).
+Beim ersten Start richte an der Konsole das Administrationskonto ein. Der vorgesehene Benutzername ist `openrct2`; der OpenRCT2-Server laeuft als eigenes Dienstkonto. Nach der Einrichtung ist der Rechner im lokalen Netz normalerweise unter `rpi-openrct2.local` erreichbar.
 
-## Layer-Versionen
+Optional kannst du vor dem Build einen oeffentlichen SSH-Schluessel in `build/local-assets/authorized_keys.example` hinterlegen. Nur oeffentliche Schluessel verwenden. Private Schluessel, VPN-Dateien und NAS-Passwoerter gehoeren nicht ins Repository.
 
-`sources.lock` enthaelt die getesteten Git-Commits von BitBake und allen benoetigten Yocto-Layern. Aenderungen an diesen Pins sollten zusammen getestet werden. Details zu Setup, Spieldaten, SDK und Flashen stehen in [`docs/BUILD.md`](docs/BUILD.md).
+## Anleitungen
+
+- [Build und Installation](docs/BUILD.md): Host vorbereiten, Spieldaten verpacken, Image bauen und flashen.
+- [Optionale Funktionen](docs/OPTIONAL-FEATURES.md): WireGuard, SMB/CIFS, Zeitzone, Displaydrehung, VNC und Viewer-Einstellungen.
+- [Serverzugang und Spielerrechte](docs/SERVER-ACCESS.md): Beitritt, Gruppen, Pause, Sicherheit und Desync-Berichte.
+- [Lokaler DSI-Viewer](docs/LOCAL-DISPLAY-AUTOSTART.md): Xorg und Spectator auf dem Panel einrichten.
+- [Paketupdates](docs/PACKAGE-UPDATES.md): OpenRCT2 aktualisieren, ohne ein neues Image zu flashen.
+- [Qt-SDK](layers/meta-custom/docs/qtcreator-sdk.md): optionales Entwickler-SDK fuer Qt-Anwendungen.
+- [qmake-Test](layers/meta-custom/examples/qt-qmake-smoke/README.md): kleiner SDK-Selbsttest.
+
+## Bilder und GIFs
+
+Screenshots und kurze Animationen liegen im Ordner [`media/`](media/). Neue Dateien dort nach Moeglichkeit klein halten und keine Konten, privaten Schluessel, VPN-Profile oder Zugangsdaten zeigen.
+
+## Sicherheit
+
+Die Beispielkonfiguration bewirbt den Server oeffentlich, verlangt kein gemeinsames Passwort und akzeptiert neue Spielerschluessel. Behandle ihn daher als oeffentlichen Community-Server. Leite den Spielport nicht direkt aus dem Internet weiter. Fuer Fernzugriff nutze ein VPN; VNC wird ausschliesslich ueber einen SSH-Tunnel angeboten. Details und sichere Alternativen stehen in [Serverzugang und Spielerrechte](docs/SERVER-ACCESS.md).
+
+Die Layer-Revisionen sind in `sources.lock` festgehalten. Build-Ausgabe, private Schluessel, VPN-Konfigurationen und lizenzierte Originalspieldaten bleiben lokal.
+
+`sources.lock` pinnt die externen Yocto-Layer; das OpenRCT2-Rezept pinnt Quellrevision und lokale Patches. Ein Build erzeugt ein neues Image, aendert aber kein bereits geflashtes Geraet. Fuer einzelne OpenRCT2-Aktualisierungen kann das IPK-Updateverfahren aus [Paketupdates](docs/PACKAGE-UPDATES.md) verwendet werden.
+
+## Begriffe
+
+- **Yocto** baut ein Linux-System aus vielen getrennten Bausteinen fuer ein bestimmtes Geraet.
+- Ein **Layer** ist ein Ordner mit Rezepten, Einstellungen und Dateien fuer solche Bausteine.
+- Ein **Rezept** (`.bb`) sagt BitBake, woher ein Programm kommt, wie es gebaut und als Paket abgelegt wird.
+- **BitBake** ist das Build-Werkzeug; ein **IPK** ist ein installierbares Paket fuer das laufende Pi-System.

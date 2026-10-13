@@ -1,0 +1,47 @@
+Subject: Measure touchscreen double tap from release
+
+Require a short first tap, then measure the double-tap interval from its
+release to the second press. This preserves the 300 ms tap-duration limit
+while allowing a brief hold on the first tap before camera panning.
+
+Upstream-Status: Pending
+
+--- a/src/openrct2/Input.h
++++ b/src/openrct2/Input.h
+@@ -51,9 +51,9 @@
+         uint8_t left, middle, right, any;
+         int32_t wheel;
+         int32_t old;
+-        bool touch, touchIsDouble;
++        bool touch, touchIsDouble, touchHasPreviousTap = false;
+         bool inputActive = false;
+-        uint32_t touchDownTimestamp;
++        uint32_t touchDownTimestamp, touchUpTimestamp;
+     };
+ 
+     struct TextInputSession
+--- a/src/openrct2-ui/UiContext.cpp
++++ b/src/openrct2-ui/UiContext.cpp
+@@ -506,9 +506,9 @@
+                 {
+                     ScreenCoordsXY fingerPos = GetTouchScreenPosition(e.tfinger, _width, _height);
+ 
+-                    _cursorState.touchIsDouble
+-                        = (!_cursorState.touchIsDouble
+-                           && e.tfinger.timestamp - _cursorState.touchDownTimestamp < kTouchDoubleTimeout);
++                    _cursorState.touchIsDouble = _cursorState.touchHasPreviousTap
++                        && e.tfinger.timestamp - _cursorState.touchUpTimestamp < kTouchDoubleTimeout;
++                    _cursorState.touchHasPreviousTap = false;
+ 
+                     if (_cursorState.touchIsDouble)
+                     {
+@@ -545,6 +545,9 @@
+                     }
+                     _cursorState.touch = true;
+                     _cursorState.inputActive = true;
++                    _cursorState.touchHasPreviousTap = !_cursorState.touchIsDouble
++                        && e.tfinger.timestamp - _cursorState.touchDownTimestamp < kTouchDoubleTimeout;
++                    _cursorState.touchUpTimestamp = e.tfinger.timestamp;
+                     break;
+                 }
+ #endif

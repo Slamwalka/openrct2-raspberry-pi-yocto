@@ -1,0 +1,79 @@
+Upstream-Status: Inappropriate [hardware-specific display rotation]
+
+--- a/src/openrct2/config/Config.h
++++ b/src/openrct2/config/Config.h
+@@ -41,2 +41,3 @@ namespace OpenRCT2::Config
+         int32_t fullscreenHeight;
++        int32_t displayRotation;
+         float windowScale;
+--- a/src/openrct2/config/Config.cpp
++++ b/src/openrct2/config/Config.cpp
+@@ -198,2 +198,3 @@ namespace OpenRCT2::Config
+             model->fullscreenWidth = reader->GetInt32("fullscreen_width", -1);
++            model->displayRotation = reader->GetInt32("display_rotation", 0);
+             model->rct1Path = reader->GetString("rct1_path", "");
+@@ -309,2 +310,3 @@ namespace OpenRCT2::Config
+         writer->WriteInt32("fullscreen_width", model->fullscreenWidth);
++        writer->WriteInt32("display_rotation", model->displayRotation);
+         writer->WriteString("rct1_path", model->rct1Path);
+--- a/src/openrct2-ui/UiContext.cpp
++++ b/src/openrct2-ui/UiContext.cpp
+@@ -66,2 +66,13 @@ using namespace OpenRCT2::Ui;
+ 
++static ScreenCoordsXY GetTouchScreenPosition(const SDL_TouchFingerEvent& event, int32_t width, int32_t height)
++{
++    ScreenCoordsXY position = { static_cast<int32_t>(event.x * width), static_cast<int32_t>(event.y * height) };
++    if (Config::Get().general.displayRotation == 180)
++    {
++        position.x = width - 1 - position.x;
++        position.y = height - 1 - position.y;
++    }
++    return position;
++}
++
+ class UiContext final : public IUiContext
+@@ -487,4 +498,3 @@ public:
+                 case SDL_FINGERMOTION:
+-                    _cursorState.position = { static_cast<int32_t>(e.tfinger.x * _width),
+-                                              static_cast<int32_t>(e.tfinger.y * _height) };
++                    _cursorState.position = GetTouchScreenPosition(e.tfinger, _width, _height);
+                     break;
+@@ -492,4 +502,3 @@ public:
+                 {
+-                    ScreenCoordsXY fingerPos = { static_cast<int32_t>(e.tfinger.x * _width),
+-                                                 static_cast<int32_t>(e.tfinger.y * _height) };
++                    ScreenCoordsXY fingerPos = GetTouchScreenPosition(e.tfinger, _width, _height);
+ 
+@@ -517,4 +526,3 @@ public:
+                 {
+-                    ScreenCoordsXY fingerPos = { static_cast<int32_t>(e.tfinger.x * _width),
+-                                                 static_cast<int32_t>(e.tfinger.y * _height) };
++                    ScreenCoordsXY fingerPos = GetTouchScreenPosition(e.tfinger, _width, _height);
+ 
+--- a/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
++++ b/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
+@@ -235,2 +235,14 @@ protected:
+ private:
++    void RenderToScreen(SDL_Texture* texture)
++    {
++        if (Config::Get().general.displayRotation == 180)
++        {
++            SDL_RenderCopyEx(_sdlRenderer, texture, nullptr, nullptr, 180.0, nullptr, SDL_FLIP_NONE);
++        }
++        else
++        {
++            SDL_RenderCopy(_sdlRenderer, texture, nullptr, nullptr);
++        }
++    }
++
+     void Display()
+@@ -261,3 +273,3 @@ private:
+             SDL_SetRenderTarget(_sdlRenderer, nullptr);
+-            SDL_RenderCopy(_sdlRenderer, _scaledScreenTexture, nullptr, nullptr);
++            RenderToScreen(_scaledScreenTexture);
+         }
+@@ -265,3 +277,3 @@ private:
+         {
+-            SDL_RenderCopy(_sdlRenderer, _screenTexture, nullptr, nullptr);
++            RenderToScreen(_screenTexture);
+         }

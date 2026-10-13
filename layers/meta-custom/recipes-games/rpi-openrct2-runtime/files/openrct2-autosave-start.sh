@@ -4,7 +4,11 @@ set -eu
 USER_DATA_PATH="${XDG_CONFIG_HOME:-${HOME:-/home/openrct2}/.config}/OpenRCT2"
 LOCAL_SAVE_DIR="$USER_DATA_PATH/save"
 NAS_SAVE_DIR="${OPENRCT2_NAS_SAVE_DIR:-/mnt/OpenRCT_SYS/config/save}"
-OPENRCT2_CLI="${OPENRCT2_CLI:-$(command -v openrct2-cli || echo /usr/bin/openrct2-cli)}"
+OPENRCT2_CLI="${OPENRCT2_CLI:-/usr/bin/openrct2-cli}"
+if [ ! -x "$OPENRCT2_CLI" ]; then
+    echo "OpenRCT2 CLI not found or not executable: $OPENRCT2_CLI" >&2
+    exit 1
+fi
 RCT1_DATA_PATH="${OPENRCT2_RCT1_DATA_PATH:-/usr/share/rct-game-data/RCT}"
 RCT2_DATA_PATH="${OPENRCT2_RCT2_DATA_PATH:-/usr/share/rct-game-data/RCT2}"
 LATEST_SAVE=

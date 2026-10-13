@@ -1,0 +1,22 @@
+Subject: Keep entity slots stable during automatic server pause
+
+Automatic headless pause stops client ticks without setting GameIsPaused().
+Do not update and remove MoneyEffects on the server alone in that state;
+all entity types share the free ID list. Preserve explicit pause behavior.
+
+Upstream-Status: Inappropriate [depends on local automatic server pause]
+
+--- a/src/openrct2/GameState.cpp
++++ b/src/openrct2/GameState.cpp
+@@ -195,7 +195,10 @@
+ 
+                 // Keep updating the money effect even when paused.
+                 auto& gameState = getGameState();
+-                gameState.entities.updateMoneyEffect();
++                if (GameIsPaused())
++                {
++                    gameState.entities.updateMoneyEffect();
++                }
+ 
+                 // Post-tick network update
+                 Network::PostTick();

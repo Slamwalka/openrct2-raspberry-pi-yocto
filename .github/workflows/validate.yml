@@ -1,0 +1,59 @@
+name: Validate project
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Check shell syntax and repository hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' script; do
+            if [[ "$(head -n 1 "$script")" == *bash* ]]; then
+              bash -n "$script"
+            else
+              sh -n "$script"
+            fi
+          done < <(find scripts layers/meta-custom -type f \
+            \( -name '*.sh' -o -name 'firstboot-user-setup' \) -print0)
+
+          if git ls-files | grep -E '(^|/)(authorized_keys|[^/]*\.pem|[^/]*\.private|rct-game-data\.tar\.gz|openrct2-official-objects\.tar\.gz|[^/]*\.(wic|ipk|img))$'; then
+            echo 'A private key, licensed game archive, image, or package is tracked.' >&2
+            exit 1
+          fi
+
+      - name: Apply OpenRCT2 patch series
+        shell: bash
+        run: |
+          set -euo pipefail
+          recipe=layers/meta-custom/recipes-games/openrct2/openrct2_0.56.bb
+          srcrev=$(sed -n 's/^SRCREV = "\([0-9a-fA-F]*\)"/\1/p' "$recipe")
+          [[ "$srcrev" =~ ^[0-9a-fA-F]{40}$ ]]
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/OpenRCT2/OpenRCT2.git "$tmp/upstream"
+          git -C "$tmp/upstream" fetch --depth=1 origin "$srcrev"
+          mkdir "$tmp/source"
+          git -C "$tmp/upstream" archive FETCH_HEAD | tar -xf - -C "$tmp/source"
+
+          mapfile -t patches < <(
+            grep -oE 'file://000[0-9]+-openrct2[^[:space:]]+\.patch' "$recipe" \
+              | sed 's#^file://##'
+          )
+          [[ ${#patches[@]} -gt 0 ]]
+          for patch_file in "${patches[@]}"; do
+            patch --batch --fuzz=0 -p1 -d "$tmp/source" \
+              < "layers/meta-custom/recipes-games/openrct2/files/$patch_file"
+          done

@@ -1,0 +1,33 @@
+Upstream-Status: Pending
+
+The options window can be opened in a minimal/embedded installation without
+any title-sequence files. In that case the configured sequence resolves to
+SIZE_MAX and GetName() returns nullptr. Do not pass that pointer to std::string
+and select the Random entry if the current sequence is unavailable.
+
+--- a/src/openrct2-ui/windows/Options.cpp
++++ b/src/openrct2-ui/windows/Options.cpp
+@@ -1871,6 +1871,7 @@
+                 case WIDX_TITLE_SEQUENCE_DROPDOWN:
+                 {
+-                    uint32_t numItems = static_cast<int32_t>(TitleSequenceManager::GetCount());
++                    const auto sequenceCount = TitleSequenceManager::GetCount();
++                    uint32_t numItems = static_cast<uint32_t>(sequenceCount);
+                     for (size_t i = 0; i < numItems; i++)
+                     {
+                         gDropdown.items[i] = Dropdown::MenuLabel(TitleSequenceManager::GetName(i));
+@@ -1889,4 +1890,6 @@
+-                    auto selectedIndex = Config::Get().interface.randomTitleSequence
+-                        ? numItems - 1
+-                        : static_cast<int32_t>(TitleGetCurrentSequence());
++                    const auto currentSequence = TitleGetCurrentSequence();
++                    const auto selectedIndex = Config::Get().interface.randomTitleSequence
++                            || currentSequence >= sequenceCount
++                        ? static_cast<int32_t>(numItems - 1)
++                        : static_cast<int32_t>(currentSequence);
+                     gDropdown.items[selectedIndex].setChecked(true);
+@@ -1970,1 +1970,3 @@
+-                _dropdownCaption = TitleSequenceManager::GetName(TitleGetConfigSequence());
++                const auto* sequenceName = TitleSequenceManager::GetName(TitleGetConfigSequence());
++                _dropdownCaption = sequenceName != nullptr ? sequenceName
++                                                            : LanguageGetString(STR_TITLE_SEQUENCE_OPENRCT2);

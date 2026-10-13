@@ -7,6 +7,7 @@ SRC_URI = " \
     file://openrct2.service \
     file://openrct2-config.ini \
     file://openrct2-groups.json \
+    file://openrct2-vnc.service \
 "
 
 inherit systemd
@@ -14,6 +15,8 @@ inherit systemd
 S = "${UNPACKDIR}"
 
 RDEPENDS:${PN} = "openrct2 rct-game-data"
+PACKAGES =+ "${PN}-vnc"
+RDEPENDS:${PN}-vnc = "x11vnc"
 SYSTEMD_SERVICE:${PN} = "openrct2.service"
 SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 
@@ -23,6 +26,7 @@ do_install() {
 
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${UNPACKDIR}/openrct2.service ${D}${systemd_system_unitdir}/
+    install -m 0644 ${UNPACKDIR}/openrct2-vnc.service ${D}${systemd_system_unitdir}/
 
     install -d ${D}${sysconfdir}/skel/.config/OpenRCT2
     install -m 0644 ${UNPACKDIR}/openrct2-config.ini ${D}${sysconfdir}/skel/.config/OpenRCT2/config.ini
@@ -35,3 +39,5 @@ FILES:${PN} = " \
     ${sysconfdir}/skel/.config/OpenRCT2/config.ini \
     ${sysconfdir}/skel/.config/OpenRCT2/groups.json \
 "
+
+FILES:${PN}-vnc = "${systemd_system_unitdir}/openrct2-vnc.service"

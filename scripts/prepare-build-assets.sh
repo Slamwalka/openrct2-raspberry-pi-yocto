@@ -8,7 +8,7 @@ fi
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 ASSET_DIR="$ROOT/layers/meta-custom/recipes-games/openrct2/files"
-RECIPE="$ROOT/layers/meta-custom/recipes-games/openrct2/openrct2_0.55.bb"
+RECIPE="$ROOT/layers/meta-custom/recipes-games/openrct2/openrct2_0.56.bb"
 GAME_RECIPE="$ROOT/layers/meta-custom/recipes-games/rct-game-data/rct-game-data_1.0.bb"
 GAME_ROOT=$(cd -- "$1" && pwd)
 PV=$(sed -n 's/^PV = "\([0-9.]*\)"/\1/p' "$RECIPE" | head -n 1)

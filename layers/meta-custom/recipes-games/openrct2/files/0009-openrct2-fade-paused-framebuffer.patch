@@ -1,0 +1,14 @@
+Upstream-Status: Pending
+
+--- a/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
++++ b/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
+@@ -490,3 +490,6 @@
+-            SDL_SetRenderDrawColor(_sdlRenderer, 0, 0, 0, 255);
+-            SDL_RenderClear(_sdlRenderer);
+-            SDL_RenderPresent(_sdlRenderer);
++            if (_backlightCurrentBrightness == 0)
++            {
++                SDL_SetRenderDrawColor(_sdlRenderer, 0, 0, 0, 255);
++                SDL_RenderClear(_sdlRenderer);
++                SDL_RenderPresent(_sdlRenderer);
++            }

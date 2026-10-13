@@ -1,44 +1,48 @@
-# Pakete auf dem Pi aktualisieren, ohne neu zu flashen
+# Pakete auf dem Pi aktualisieren
 
-Ein komplettes Image muss nur neu auf die SD-Karte geschrieben werden, wenn sich Partitionierung, Bootloader, Dateisystem oder die grundlegende Installation aendern soll. Fuer normale Programm- und Bibliotheksupdates kann das passende Yocto-IPK auf dem laufenden Pi installiert werden. Die Aenderung bleibt auch nach einem Neustart erhalten.
+Ein IPK-Update installiert neue Dateien in das bestehende System. Es flasht kein Image und normalerweise ist kein kompletter Pi-Neustart noetig. Das Projekt-Update-Skript aktualisiert nur OpenRCT2 und bricht ab, wenn entfernte Spieler verbunden sind.
 
-## Was du brauchst
+## Automatisches OpenRCT2-Update
 
-- Eine SSH-Verbindung zum Pi und ein Konto mit `sudo`
-- Das eingerichtete Yocto-Buildverzeichnis
-- Genug freien Speicher im Buildverzeichnis fuer das Paket
-
-Das Image verwendet IPK-Pakete; auf dem Pi verwaltet `opkg` sie.
-
-## Ein Paket bauen
-
-Auf dem Build-PC:
+Zuerst Versionsstand, geplante Aenderungen und Zielgeraet pruefen:
 
 ```sh
-cd /pfad/zu/rpi-openrct2/build
+layers/meta-custom/recipes-games/openrct2/update-openrct2.sh --help
+layers/meta-custom/recipes-games/openrct2/update-openrct2.sh --check --pi openrct2@rpi-openrct2.local
+layers/meta-custom/recipes-games/openrct2/update-openrct2.sh --dry-run --pi openrct2@rpi-openrct2.local
+```
+
+`--check` liest Versionen, ohne Dateien zu aendern oder zu bauen. `--dry-run` zeigt den Plan. Bei einem echten Update ermittelt das Skript einen stabilen OpenRCT2-Release, prueft AppImage und Datenassets, aktualisiert `SRCREV` und Paketdaten, prueft die Patchserie und baut nur das OpenRCT2-IPK.
+
+Vor der Installation prueft das Skript die aktiven Verbindungen des Servers. Sind externe Spieler verbunden, wird abgebrochen. Danach haelt es Server, DSI-Viewer und VNC geordnet an und startet nur die vorher aktiven Dienste wieder. Es rebootet den Pi nicht und baut kein Komplettimage.
+
+```sh
+layers/meta-custom/recipes-games/openrct2/update-openrct2.sh --pi openrct2@rpi-openrct2.local
+```
+
+`--force` ueberspringt den Vergleich mit der bereits installierten Version und baut/installiert erneut. Verwende es nur, wenn eine gezielte Neuinstallation erforderlich ist.
+
+## Ein IPK manuell installieren
+
+Manuelle Updates haben keine Spielerverbindungs-Pruefung. Plane ein Wartungsfenster, wenn andere Spieler den Server nutzen. Vor einem Serverneustart aktuelle Spielerliste und TCP-Verbindungen auf Port `11753` pruefen; den lokalen Spectator in Gruppe 1 nicht als aktiven Spieler zaehlen. Ein nicht-lokaler `ESTABLISHED`-Peer ist ein Grund zu warten.
+
+Der Server speichert beim Stoppen nicht garantiert einen letzten Stand. Pruefe vor dem Neustart, dass der neueste gueltige `.park`-Autosave nach der letzten Spielaktion geschrieben wurde. Bei Unsicherheit den naechsten Autosave abwarten. `SIGTERM` ist kein Save-Befehl. Nach dem Start im Log kontrollieren, dass der neueste erwartete Spielstand geladen wurde.
+
+Im Buildverzeichnis des Repositories:
+
+```sh
 source ../layers/openembedded-core/oe-init-build-env .
-BB_NUMBER_THREADS=2 PARALLEL_MAKE=2 nice -n 19 bitbake openrct2
+BB_NUMBER_THREADS=8 PARALLEL_MAKE="-j 4" nice -n 19 bitbake openrct2
 ```
 
-Das baut nur OpenRCT2 samt Paket, kein neues SD-Karten-Image. Die IPK-Datei liegt unter `tmp/deploy/ipk/cortexa72/`; ihr Name enthaelt die Paketversion, zum Beispiel `openrct2_<Version>-r0_cortexa72.ipk`.
-
-Fuer andere Pakete den Namen austauschen. Ein einzelnes IPK kann aus bereits vorhandenen Build-Ergebnissen mit diesem Task geschrieben werden:
-
-```sh
-bitbake -c package_write_ipk <paketname>
-```
-
-## Auf den Pi kopieren und installieren
-
-Beispiel fuer OpenRCT2. `<Version>` durch den tatsaechlichen Dateinamen ersetzen:
+Das Paket liegt danach unter `tmp/deploy/ipk/cortexa72/`. Kopiere die tatsaechlich gebaute Version auf den Pi:
 
 ```sh
 scp tmp/deploy/ipk/cortexa72/openrct2_<Version>-r0_cortexa72.ipk \
     openrct2@rpi-openrct2.local:/tmp/
-ssh openrct2@rpi-openrct2.local
 ```
 
-Auf dem Pi:
+Auf dem Pi den Server waehrend des Paketwechsels stoppen und wieder starten:
 
 ```sh
 sudo systemctl stop openrct2.service
@@ -46,30 +50,9 @@ sudo opkg install /tmp/openrct2_<Version>-r0_cortexa72.ipk
 sudo systemctl start openrct2.service
 ```
 
-Das Paket wird in das bestehende System installiert. Spielstaende und nicht paketverwaltete Benutzerdateien bleiben erhalten; ein Flashen ist nicht noetig.
+Bei einem Paket-Downgrade zuerst `opkg status openrct2` pruefen. `--force-downgrade` nicht routinemaessig einsetzen. Ein Paketupdate aendert keine Kernel-, Bootloader- oder Partitionsdateien.
 
-## Mehrere abhaengige Pakete
-
-Wenn mehrere Pakete geaendert wurden, alle passenden IPKs kopieren und gemeinsam installieren. Runtime, Spielprogramm und Spieldaten sind getrennte Pakete:
-
-```sh
-scp tmp/deploy/ipk/cortexa72/openrct2_<Version>-r0_cortexa72.ipk \
-    tmp/deploy/ipk/cortexa72/rpi-openrct2-runtime_1.0-r0_cortexa72.ipk \
-    tmp/deploy/ipk/cortexa72/rct-game-data_1.0-r0_cortexa72.ipk \
-    openrct2@rpi-openrct2.local:/tmp/
-```
-
-```sh
-sudo systemctl stop openrct2.service
-sudo opkg install /tmp/openrct2_<Version>-r0_cortexa72.ipk \
-    /tmp/rpi-openrct2-runtime_1.0-r0_cortexa72.ipk \
-    /tmp/rct-game-data_1.0-r0_cortexa72.ipk
-sudo systemctl start openrct2.service
-```
-
-Nur Pakete kopieren, die fuer deine Aenderung neu gebaut wurden. Fuer OpenRCT2-Versionen gibt es ausserdem `layers/meta-custom/recipes-games/openrct2/update-openrct2.sh`. Erst mit `--help` und `--check` pruefen, bevor das Skript Pakete installiert und den Pi neu startet.
-
-## Pruefen
+## Erfolg pruefen
 
 ```sh
 opkg status openrct2 | grep -E '^(Version|Status):'
@@ -78,12 +61,4 @@ systemctl is-active openrct2.service
 journalctl -u openrct2.service -n 60 --no-pager
 ```
 
-Ein Paketupdate braucht normalerweise nur einen Neustart des betroffenen Dienstes. Ein kompletter Pi-Neustart ist nur fuer Kernel-, Bootloader- oder andere grundlegende Systemupdates noetig.
-
-## Wann doch ein neues Image noetig ist
-
-- Aenderungen an Bootloader, Kernel, Partitionierung oder Dateisystem
-- Aenderungen an fruehen Bootdiensten oder Image-Erstellungsregeln
-- Pakete, die nicht separat paketiert oder auf dem Pi aktualisiert werden
-
-Bei neuen/lokal bereitgestellten RCT-Spielinhalten zuerst `scripts/prepare-build-assets.sh` mit der eigenen lizenzierten Installation ausfuehren und danach `rct-game-data` bauen. Ein bewusstes Downgrade nur nach Versionspruefung und gezielt mit `opkg --force-downgrade` ausfuehren.
+Auf Fehler wie `Unable to open park`, `Object not found` oder fehlende Spieldaten achten. Bei Aenderungen an Kernel, Bootparametern, Partitionen oder Image-Erstellung stattdessen ein neues Image bauen und flashen; das ueberschreibt die ganze SD-Karte.

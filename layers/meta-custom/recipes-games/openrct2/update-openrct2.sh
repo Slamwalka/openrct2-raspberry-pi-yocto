@@ -4,11 +4,12 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/../../../.." && pwd)
 BUILD_DIR="$REPO_ROOT/build"
-RECIPE="$SCRIPT_DIR/openrct2_0.55.bb"
+RECIPE="$SCRIPT_DIR/openrct2_0.56.bb"
 FILES_DIR="$SCRIPT_DIR/files"
 DEPLOY_DIR="$BUILD_DIR/tmp/deploy/ipk/cortexa72"
 PI_HOST=${PI_HOST:-openrct2@rpi-openrct2.local}
 THREADS=${BB_NUMBER_THREADS:-2}
+DATA_FILES=(g2.dat fonts.dat palettes.dat tracks.dat)
 
 FORCE=0
 CHECK_ONLY=0
@@ -36,14 +37,13 @@ while (($#)); do
             cat <<'USAGE'
 Usage: update-openrct2.sh [--check] [--dry-run] [--force] [--pi user@host]
 
-Checks the latest stable GitHub release, updates SRCREV and official objects,
-builds only the OpenRCT2/runtime IPKs, installs them on the Pi, verifies the
-server, and reboots the Pi.
+Checks the latest stable release, updates source/data pins, validates patches, and builds the OpenRCT2 IPK.
+Installation is refused while remote players are connected; no Pi reboot is performed.
 
   --check       Show versions without changing files or building.
-  --dry-run     Show the planned action without changing files or building.
+  --dry-run     Show the planned package update without changing files or installing.
   --force       Rebuild/reinstall even if the current release is installed.
-    --pi HOST     Override the SSH target (default: openrct2@rpi-openrct2.local).
+  --pi HOST     Override the SSH target (default: openrct2@rpi-openrct2.local).
 USAGE
             exit 0
             ;;
@@ -66,7 +66,11 @@ cleanup() {
     if ((status != 0 && ROLLBACK)); then
         cp -p "$TMP_DIR/openrct2.bb" "$RECIPE"
         cp -p "$TMP_DIR/openrct2-objects.tar.gz" "$FILES_DIR/openrct2-official-objects.tar.gz"
-        echo "Update preparation failed; recipe and object archive were restored." >&2
+        for asset in "${DATA_FILES[@]}"; do
+            cp -p "$TMP_DIR/$asset" "$FILES_DIR/$asset"
+            rm -f "$FILES_DIR/.$asset.new"
+        done
+        echo "Update preparation failed; recipe, object archive, and data assets were restored." >&2
     fi
     rm -rf "$TMP_DIR"
     exit "$status"
@@ -74,6 +78,7 @@ cleanup() {
 trap cleanup EXIT
 
 PV_CURRENT=$(sed -n 's/^PV = "\([^"]*\)"/\1/p' "$RECIPE" | head -n 1)
+DATA_VERSION_CURRENT=$(sed -n 's/^OPENRCT2_DATA_VERSION = "\([^"]*\)"/\1/p' "$RECIPE" | head -n 1)
 SRCREV_CURRENT=$(sed -n 's/^SRCREV = "\([0-9a-fA-F]*\)"/\1/p' "$RECIPE" | head -n 1)
 [[ -n "$SRCREV_CURRENT" ]] || { echo "Could not read SRCREV from recipe." >&2; exit 1; }
 
@@ -107,31 +112,34 @@ REMOTE_VERSION=$(ssh -o BatchMode=yes -o ConnectTimeout=8 "$PI_HOST" '
 ')
 
 printf 'OpenRCT2 release: %s (%s)\n' "$TAG" "$SRCREV"
-printf 'Recipe: PV=%s SRCREV=%s\n' "${PV_CURRENT:-filename default}" "$SRCREV_CURRENT"
+printf 'Recipe: PV=%s DATA=%s SRCREV=%s\n' "${PV_CURRENT:-filename default}" "${DATA_VERSION_CURRENT:-unset}" "$SRCREV_CURRENT"
 printf 'Pi binary: %s\n' "$REMOTE_VERSION"
 
 if ((CHECK_ONLY)); then
-    if [[ "$SRCREV_CURRENT" == "$SRCREV" && "$REMOTE_VERSION" == "$VERSION" ]]; then
-        echo "Pi and Yocto recipe are current."
+    if [[ "$SRCREV_CURRENT" == "$SRCREV" && "$REMOTE_VERSION" == "$VERSION" && "$DATA_VERSION_CURRENT" == "$VERSION" ]]; then
+        echo "Pi, Yocto recipe, and bundled data assets are current."
     else
         echo "Update available or recipe/Pi versions differ."
     fi
     exit 0
 fi
 
-if (( ! FORCE )) && [[ "$SRCREV_CURRENT" == "$SRCREV" && "$REMOTE_VERSION" == "$VERSION" ]]; then
-    echo "Already running the latest release; no build, install, or reboot needed."
+if (( ! FORCE )) && [[ "$SRCREV_CURRENT" == "$SRCREV" && "$REMOTE_VERSION" == "$VERSION" && "$DATA_VERSION_CURRENT" == "$VERSION" ]]; then
+    echo "Latest release and data assets are already installed; no build, install, or reboot needed."
     exit 0
 fi
 
 if ((DRY_RUN)); then
-    printf 'Would update recipe to PV=%s SRCREV=%s, rebuild IPKs, install on %s, and reboot.\n' \
+    printf 'Would update recipe to PV=%s SRCREV=%s, validate patches, build the OpenRCT2 IPK, and install on %s (no reboot).\n' \
         "$VERSION" "$SRCREV" "$PI_HOST"
     exit 0
 fi
 
 cp -p "$RECIPE" "$TMP_DIR/openrct2.bb"
 cp -p "$FILES_DIR/openrct2-official-objects.tar.gz" "$TMP_DIR/openrct2-objects.tar.gz"
+for asset in "${DATA_FILES[@]}"; do
+    cp -p "$FILES_DIR/$asset" "$TMP_DIR/$asset"
+done
 ROLLBACK=1
 
 curl -fsSL --retry 2 --max-time 60 "$CHECKSUM_URL" -o "$TMP_DIR/checksums.txt"
@@ -157,8 +165,19 @@ mkdir "$TMP_DIR/extract"
 }
 OBJECTS_DIR="$TMP_DIR/extract/squashfs-root/usr/share/openrct2/object"
 [[ -d "$OBJECTS_DIR" ]] || { echo "AppImage has no OpenRCT2 object directory." >&2; exit 1; }
+DATA_DIR="$TMP_DIR/extract/squashfs-root/usr/share/openrct2"
+for asset in "${DATA_FILES[@]}"; do
+    [[ -s "$DATA_DIR/$asset" ]] || { echo "AppImage is missing data asset: $asset" >&2; exit 1; }
+done
 OBJECT_COUNT=$(find "$OBJECTS_DIR" -type f | wc -l)
 ((OBJECT_COUNT > 1000)) || { echo "Unexpectedly small object tree: $OBJECT_COUNT files." >&2; exit 1; }
+
+for asset in "${DATA_FILES[@]}"; do
+    install -m 0644 "$DATA_DIR/$asset" "$FILES_DIR/.$asset.new"
+done
+for asset in "${DATA_FILES[@]}"; do
+    mv "$FILES_DIR/.$asset.new" "$FILES_DIR/$asset"
+done
 
 NEW_ARCHIVE="$TMP_DIR/openrct2-official-objects.tar.gz"
 tar --sort=name --owner=0 --group=0 --numeric-owner \
@@ -189,6 +208,7 @@ if re.search(r'^PV\s*=', text, flags=re.MULTILINE):
 else:
     replace_one(r'^(DESCRIPTION\s*=.*)$', rf'\1\nPV = "{version}"', "DESCRIPTION")
 replace_one(r'^SRCREV\s*=.*$', f'SRCREV = "{srcrev}"', "SRCREV")
+replace_one(r'^OPENRCT2_DATA_VERSION\s*=.*$', f'OPENRCT2_DATA_VERSION = "{version}"', "data asset version")
 replace_one(r'^SRC_URI\[openrct2objects\.sha256sum\]\s*=.*$',
             f'SRC_URI[openrct2objects.sha256sum] = "{object_sha}"', "object checksum")
 replace_one(r'^DESCRIPTION\s*=.*$',
@@ -200,85 +220,147 @@ temporary.write_text(text)
 temporary.replace(recipe)
 PY
 
-echo "Fetching source revision and building only OpenRCT2/runtime IPKs..."
+echo "Fetching source revision, validating the patch series, and building the OpenRCT2 package..."
 set +u
 source "$REPO_ROOT/layers/openembedded-core/oe-init-build-env" "$BUILD_DIR" >/dev/null
 set -u
 BB_NUMBER_THREADS="$THREADS" PARALLEL_MAKE="$THREADS" nice -n 19 bitbake -c fetch openrct2
+BB_NUMBER_THREADS="$THREADS" PARALLEL_MAKE="$THREADS" nice -n 19 bitbake -c patch openrct2
 BB_NUMBER_THREADS="$THREADS" PARALLEL_MAKE="$THREADS" nice -n 19 \
-    bitbake package_write_ipk openrct2 rpi-openrct2-runtime
+    bitbake openrct2
 
 OPENRCT2_IPK="$DEPLOY_DIR/openrct2_${VERSION}-r0_cortexa72.ipk"
-RUNTIME_IPK="$DEPLOY_DIR/rpi-openrct2-runtime_1.0-r0_cortexa72.ipk"
 [[ -s "$OPENRCT2_IPK" ]] || { echo "Expected package not found: $OPENRCT2_IPK" >&2; exit 1; }
-[[ -s "$RUNTIME_IPK" ]] || { echo "Expected package not found: $RUNTIME_IPK" >&2; exit 1; }
 ROLLBACK=0
 
 echo "Copying packages to $PI_HOST..."
-scp -o BatchMode=yes "$OPENRCT2_IPK" "$RUNTIME_IPK" "$PI_HOST:/tmp/"
+ssh -o BatchMode=yes "$PI_HOST" sudo -n python3 - <<'PY'
+import ipaddress
+from pathlib import Path
+
+server = next((p.name for p in Path("/proc").iterdir()
+               if p.name.isdigit()
+               and Path(f"/proc/{p.name}/comm").read_text(errors="ignore").strip() == "openrct2-cli"), None)
+if server is None:
+    raise SystemExit("OpenRCT2 server is not running; refusing unattended update")
+
+inodes = set()
+for fd in (Path("/proc") / server / "fd").iterdir():
+    try:
+        target = fd.resolve().name
+        if target.startswith("socket:["):
+            inodes.add(target[8:-1])
+    except OSError:
+        pass
+
+remote_peers = []
+for table in ("tcp", "tcp6"):
+    for line in Path(f"/proc/net/{table}").read_text().splitlines()[1:]:
+        fields = line.split()
+        if fields[9] not in inodes or fields[3] != "01":
+            continue
+        address = bytes.fromhex(fields[2].split(":")[0])
+        if table == "tcp":
+            address = address[::-1]
+        else:
+            address = b"".join(address[i:i + 4][::-1] for i in range(0, 16, 4))
+        peer = ipaddress.ip_address(address)
+        if peer.ipv4_mapped is not None:
+            peer = peer.ipv4_mapped
+        if not peer.is_loopback:
+            remote_peers.append(str(peer))
+
+if remote_peers:
+    raise SystemExit("Remote players are connected; update aborted: " + ", ".join(remote_peers))
+print("No remote players connected; update may proceed")
+PY
+scp -o BatchMode=yes "$OPENRCT2_IPK" "$PI_HOST:/tmp/"
 
 ssh -o BatchMode=yes "$PI_HOST" sudo -n sh -s -- \
-    "${OPENRCT2_IPK##*/}" "${RUNTIME_IPK##*/}" "$VERSION" <<'REMOTE'
+    "${OPENRCT2_IPK##*/}" "$VERSION" <<'REMOTE'
 set -eu
 openrct2_ipk=$1
-runtime_ipk=$2
-expected_version=$3
+expected_version=$2
 
+display_was_active=$(systemctl is-active openrct2-display.service 2>/dev/null || true)
+vnc_was_active=$(systemctl is-active openrct2-vnc.service 2>/dev/null || true)
+services_stopped=0
+restore_services() {
+    status=$?
+    trap - EXIT
+    if [ "$services_stopped" = 1 ]; then
+        systemctl start openrct2.service >/dev/null 2>&1 || true
+        [ "$display_was_active" != active ] || systemctl start openrct2-display.service >/dev/null 2>&1 || true
+        [ "$vnc_was_active" != active ] || systemctl start openrct2-vnc.service >/dev/null 2>&1 || true
+    fi
+    rm -f "/tmp/$openrct2_ipk"
+    exit "$status"
+}
+trap restore_services EXIT
+
+python3 - <<'PY'
+import ipaddress
+from pathlib import Path
+
+server = next((p.name for p in Path("/proc").iterdir()
+               if p.name.isdigit()
+               and Path(f"/proc/{p.name}/comm").read_text(errors="ignore").strip() == "openrct2-cli"), None)
+if server is None:
+    raise SystemExit("OpenRCT2 server is not running; refusing unattended update")
+
+inodes = set()
+for fd in (Path("/proc") / server / "fd").iterdir():
+    try:
+        target = fd.resolve().name
+        if target.startswith("socket:["):
+            inodes.add(target[8:-1])
+    except OSError:
+        pass
+
+remote_peers = []
+for table in ("tcp", "tcp6"):
+    for line in Path(f"/proc/net/{table}").read_text().splitlines()[1:]:
+        fields = line.split()
+        if fields[9] not in inodes or fields[3] != "01":
+            continue
+        address = bytes.fromhex(fields[2].split(":")[0])
+        if table == "tcp":
+            address = address[::-1]
+        else:
+            address = b"".join(address[i:i + 4][::-1] for i in range(0, 16, 4))
+        peer = ipaddress.ip_address(address)
+        if peer.ipv4_mapped is not None:
+            peer = peer.ipv4_mapped
+        if not peer.is_loopback:
+            remote_peers.append(str(peer))
+
+if remote_peers:
+    raise SystemExit("Remote players are connected; update aborted: " + ", ".join(remote_peers))
+print("No remote players connected; update may proceed")
+PY
+
+systemctl stop openrct2-vnc.service 2>/dev/null || true
+systemctl stop openrct2-display.service 2>/dev/null || true
+services_stopped=1
 systemctl stop openrct2.service
-opkg install --force-downgrade "/tmp/$openrct2_ipk" "/tmp/$runtime_ipk"
-install -d -o root -g root -m 0755 /etc/systemd/system/openrct2.service.d
-cat >/etc/systemd/system/openrct2.service.d/20-yocto-cli.conf <<'EOF'
-[Service]
-ExecStart=
-ExecStart=/usr/bin/openrct2-autosave-start.sh
-Environment=OPENRCT2_CLI=/usr/bin/openrct2-cli
-EOF
-chmod 0644 /etc/systemd/system/openrct2.service.d/20-yocto-cli.conf
-systemctl daemon-reload
+opkg install --force-reinstall "/tmp/$openrct2_ipk"
 systemctl start openrct2.service
+[ "$display_was_active" != active ] || systemctl start openrct2-display.service
+[ "$vnc_was_active" != active ] || systemctl start openrct2-vnc.service
 systemctl is-active --quiet openrct2.service
 actual_version=$(/usr/bin/openrct2-cli --version | sed -n '1s/.*v\([0-9][0-9.]*\).*/\1/p')
 [ "$actual_version" = "$expected_version" ] || {
     echo "Installed CLI reports $actual_version, expected $expected_version." >&2
     exit 1
 }
-if journalctl -u openrct2.service --since '-2 minutes' --no-pager | grep -E 'Unable to open park|Object not found'; then
-    echo "OpenRCT2 reported missing objects after package installation." >&2
+if journalctl -u openrct2.service --since '-2 minutes' --no-pager | grep -E 'Unable to open park|Object not found|Mismatched palettes.dat size'; then
+    echo "OpenRCT2 reported missing data after package installation." >&2
     exit 1
 fi
+rm -f "/tmp/$openrct2_ipk"
+services_stopped=0
+trap - EXIT
 echo "OpenRCT2 $actual_version installed and service is active."
 REMOTE
 
-echo "Rebooting Pi to verify boot-time startup..."
-OLD_BOOT_ID=$(ssh -o BatchMode=yes "$PI_HOST" cat /proc/sys/kernel/random/boot_id)
-ssh -o BatchMode=yes -o ConnectTimeout=8 "$PI_HOST" 'sudo -n systemctl reboot' >/dev/null 2>&1 || true
-reconnected=0
-for ((attempt = 0; attempt < 60; attempt++)); do
-    NEW_BOOT_ID=$(ssh -o BatchMode=yes -o ConnectTimeout=3 "$PI_HOST" cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)
-    if [[ -n "$NEW_BOOT_ID" && "$NEW_BOOT_ID" != "$OLD_BOOT_ID" ]]; then
-        reconnected=1
-        break
-    fi
-    sleep 2
-done
-((reconnected)) || { echo "Pi did not return on SSH after reboot." >&2; exit 1; }
-
-ssh -o BatchMode=yes "$PI_HOST" sudo -n sh -s -- "$VERSION" <<'REMOTE'
-set -eu
-expected_version=$1
-systemctl is-active --quiet openrct2.service
-systemctl is-active --quiet wg-quick@rglvps.service
-actual_version=$(/usr/bin/openrct2-cli --version | sed -n '1s/.*v\([0-9][0-9.]*\).*/\1/p')
-[ "$actual_version" = "$expected_version" ] || {
-    echo "Post-reboot CLI reports $actual_version, expected $expected_version." >&2
-    exit 1
-}
-journalctl -b -u openrct2.service --no-pager | grep -F 'Listening for clients on *:11753' >/dev/null
-if journalctl -b -u openrct2.service --no-pager | grep -E 'Unable to open park|Object not found'; then
-    echo "OpenRCT2 reported missing objects after reboot." >&2
-    exit 1
-fi
-echo "Post-reboot check passed: OpenRCT2 $actual_version, service active, port 11753 listening, WireGuard active."
-REMOTE
-
-echo "Update complete: OpenRCT2 $VERSION is running on $PI_HOST."
+echo "Update complete: OpenRCT2 $VERSION is running on $PI_HOST; no Pi reboot was required."

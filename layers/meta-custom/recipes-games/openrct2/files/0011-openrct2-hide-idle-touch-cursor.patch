@@ -1,0 +1,161 @@
+Upstream-Status: Pending
+
+--- a/src/openrct2/Input.h
++++ b/src/openrct2/Input.h
+@@ -52,6 +52,7 @@
+         int32_t wheel;
+         int32_t old;
+         bool touch, touchIsDouble;
++        bool inputActive = false;
+         uint32_t touchDownTimestamp;
+     };
+ 
+--- a/src/openrct2-ui/UiContext.cpp
++++ b/src/openrct2-ui/UiContext.cpp
+@@ -363,6 +363,7 @@
+         _cursorState.middle &= ~CURSOR_CHANGED;
+         _cursorState.right &= ~CURSOR_CHANGED;
+         _cursorState.old = 0;
++        _cursorState.inputActive = false;
+ 
+         SDL_Event e;
+         while (SDL_PollEvent(&e))
+@@ -446,6 +447,7 @@
+                             break;
+                     }
+                     _cursorState.touch = false;
++                    _cursorState.inputActive = true;
+ 
+                     {
+                         InputEvent ie;
+@@ -482,6 +484,7 @@
+                             break;
+                     }
+                     _cursorState.touch = false;
++                    _cursorState.inputActive = true;
+ 
+                     {
+                         InputEvent ie;
+@@ -497,6 +500,7 @@
+ #ifndef __MACOSX__
+                 case SDL_FINGERMOTION:
+                     _cursorState.position = GetTouchScreenPosition(e.tfinger, _width, _height);
++                    _cursorState.inputActive = true;
+                     break;
+                 case SDL_FINGERDOWN:
+                 {
+@@ -519,6 +523,7 @@
+                         _cursorState.old = 1;
+                     }
+                     _cursorState.touch = true;
++                    _cursorState.inputActive = true;
+                     _cursorState.touchDownTimestamp = e.tfinger.timestamp;
+                     break;
+                 }
+@@ -539,6 +544,7 @@
+                         _cursorState.old = 3;
+                     }
+                     _cursorState.touch = true;
++                    _cursorState.inputActive = true;
+                     break;
+                 }
+ #endif
+--- a/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
++++ b/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
+@@ -61,6 +61,9 @@
+     uint32_t _lastServerTick = 0;
+     std::chrono::steady_clock::time_point _lastServerTickChange{};
+     bool _pauseSaverDismissed = false;
++    bool _touchTimerInitialized = false;
++    bool _spectatorCursorVisible = true;
++    std::chrono::steady_clock::time_point _lastTouchInput{};
+     bool _backlightInitialized = false;
+     bool _backlightBlanked = false;
+     int32_t _restoreBacklightBrightness = 0;
+@@ -379,6 +382,12 @@
+ 
+         const auto now = std::chrono::steady_clock::now();
+         const auto* cursor = _uiContext.GetCursorState();
++        const bool userTouch = cursor != nullptr && cursor->inputActive;
++        if (userTouch && !_spectatorCursorVisible)
++        {
++            _uiContext.SetCursorVisible(true);
++            _spectatorCursorVisible = true;
++        }
+         if (!_spectatorTourInitialized)
+         {
+             _spectatorTourInitialized = true;
+@@ -397,8 +406,7 @@
+         bool userInput = false;
+         if (cursor != nullptr)
+         {
+-            userInput = !_spectatorTourHasCursor || cursor->position.x != _spectatorTourCursorX
+-                || cursor->position.y != _spectatorTourCursorY || cursor->wheel != _spectatorTourWheel
++            userInput = userTouch || cursor->wheel != _spectatorTourWheel
+                 || ((cursor->left | cursor->middle | cursor->right) & CURSOR_CHANGED) != 0;
+             _spectatorTourHasCursor = true;
+             _spectatorTourCursorX = cursor->position.x;
+@@ -459,6 +467,29 @@
+         if (Network::GetMode() == Network::Mode::client && Network::GetStatus() == Network::Status::connected)
+         {
+             const auto now = std::chrono::steady_clock::now();
++            const auto* cursorState = _uiContext.GetCursorState();
++            if (!_touchTimerInitialized)
++            {
++                _lastTouchInput = now;
++                _touchTimerInitialized = true;
++                _spectatorCursorVisible = true;
++                _uiContext.SetCursorVisible(true);
++            }
++            if (cursorState != nullptr && cursorState->inputActive)
++            {
++                _lastTouchInput = now;
++                if (!_spectatorCursorVisible)
++                {
++                    _uiContext.SetCursorVisible(true);
++                    _spectatorCursorVisible = true;
++                }
++            }
++            else if (_spectatorCursorVisible && now - _lastTouchInput >= std::chrono::seconds(10))
++            {
++                _uiContext.SetCursorVisible(false);
++                _spectatorCursorVisible = false;
++            }
++
+             const auto serverTick = Network::GetServerTick();
+             if (!_hasServerTick || serverTick != _lastServerTick)
+             {
+@@ -468,13 +499,18 @@
+                 _pauseSaverDismissed = false;
+             }
+ 
+-            const auto* cursorState = _uiContext.GetCursorState();
+             if (cursorState != nullptr
+-                && ((cursorState->left | cursorState->middle | cursorState->right) & CURSOR_CHANGED) != 0)
++                && (cursorState->inputActive
++                    || ((cursorState->left | cursorState->middle | cursorState->right) & CURSOR_CHANGED) != 0))
+             {
+                 _pauseSaverDismissed = true;
+             }
+ 
++            if (_pauseSaverDismissed && now - _lastTouchInput >= std::chrono::seconds(120))
++            {
++                _pauseSaverDismissed = false;
++            }
++
+             blankForPausedServer = !_pauseSaverDismissed
+                 && now - _lastServerTickChange >= std::chrono::seconds(120);
+         }
+@@ -482,6 +518,12 @@
+         {
+             _hasServerTick = false;
+             _pauseSaverDismissed = false;
++            _touchTimerInitialized = false;
++            if (!_spectatorCursorVisible)
++            {
++                _uiContext.SetCursorVisible(true);
++                _spectatorCursorVisible = true;
++            }
+         }
+ 
+         SetBacklightBlanked(blankForPausedServer);

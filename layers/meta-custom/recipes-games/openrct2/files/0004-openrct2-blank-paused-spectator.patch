@@ -1,0 +1,83 @@
+Upstream-Status: Inappropriate [project-specific kiosk display behavior]
+
+--- a/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
++++ b/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
+@@ -9,6 +9,7 @@
+ 
+ #include "DrawingEngineFactory.hpp"
+ 
++#include <chrono>
+ #include <SDL_hints.h>
+ #include <SDL_render.h>
+ #include <SDL_version.h>
+@@ -16,12 +17,14 @@
+ #include <memory>
+ #include <openrct2/Diagnostic.h>
+ #include <openrct2/Game.h>
++#include <openrct2/Input.h>
+ #include <openrct2/config/Config.h>
+ #include <openrct2/core/Guard.hpp>
+ #include <openrct2/drawing/IDrawingEngine.h>
+ #include <openrct2/drawing/LightFX.h>
+ #include <openrct2/drawing/X8DrawingEngine.h>
+ #include <openrct2/interface/Window.h>
++#include <openrct2/network/Network.h>
+ #include <openrct2/paint/Paint.h>
+ #include <openrct2/ui/UiContext.h>
+ #include <vector>
+@@ -47,6 +50,11 @@
+ 
+     bool _useVsync = true;
+ 
++    bool _hasServerTick = false;
++    uint32_t _lastServerTick = 0;
++    std::chrono::steady_clock::time_point _lastServerTickChange{};
++    bool _pauseSaverDismissed = false;
++
+     std::vector<uint32_t> _dirtyVisualsTime;
+ 
+     bool smoothNN = false;
+@@ -247,6 +255,43 @@
+ 
+     void Display()
+     {
++        bool blankForPausedServer = false;
++        if (Network::GetMode() == Network::Mode::client && Network::GetStatus() == Network::Status::connected)
++        {
++            const auto now = std::chrono::steady_clock::now();
++            const auto serverTick = Network::GetServerTick();
++            if (!_hasServerTick || serverTick != _lastServerTick)
++            {
++                _hasServerTick = true;
++                _lastServerTick = serverTick;
++                _lastServerTickChange = now;
++                _pauseSaverDismissed = false;
++            }
++
++            const auto* cursorState = _uiContext.GetCursorState();
++            if (cursorState != nullptr
++                && ((cursorState->left | cursorState->middle | cursorState->right) & CURSOR_CHANGED) != 0)
++            {
++                _pauseSaverDismissed = true;
++            }
++
++            blankForPausedServer = !_pauseSaverDismissed
++                && now - _lastServerTickChange >= std::chrono::seconds(120);
++        }
++        else
++        {
++            _hasServerTick = false;
++            _pauseSaverDismissed = false;
++        }
++
++        if (blankForPausedServer)
++        {
++            SDL_SetRenderDrawColor(_sdlRenderer, 0, 0, 0, 255);
++            SDL_RenderClear(_sdlRenderer);
++            SDL_RenderPresent(_sdlRenderer);
++            return;
++        }
++
+         auto* viewport = WindowGetViewport(WindowGetMain());
+ 
+         if (Config::Get().general.enableLightFx && viewport != nullptr)

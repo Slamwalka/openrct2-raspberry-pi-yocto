@@ -1,0 +1,142 @@
+Upstream-Status: Pending
+
+--- a/src/openrct2/network/NetworkBase.cpp
++++ b/src/openrct2/network/NetworkBase.cpp
+@@ -87,6 +87,7 @@
+     #include "Socket.h"
+ 
+     #include <array>
++    #include <chrono>
+     #include <fstream>
+     #include <functional>
+     #include <list>
+@@ -527,12 +528,24 @@
+ 
+     void NetworkBase::UpdateServer()
+     {
++        const auto now = std::chrono::steady_clock::now();
+         for (auto& connection : client_connection_list)
+         {
+             // This can be called multiple times before the connection is removed.
+             if (!connection->isValid())
+                 continue;
+ 
++            if (connection->pendingRejoin && now >= connection->rejoinReadyTime)
++            {
++                const auto playerName = std::move(connection->pendingPlayerName);
++                const auto keyHash = std::move(connection->pendingPlayerKeyHash);
++                connection->pendingRejoin = false;
++                connection->authStatus = Auth::ok;
++                ServerClientJoined(playerName, keyHash, *connection);
++                _recentDisconnects.erase(keyHash);
++                ServerSendAuth(*connection);
++            }
++
+             connection->update();
+         }
+     }
+@@ -2175,6 +2188,19 @@
+         if (connection_player == nullptr)
+             return;
+ 
++        if (!connection_player->keyHash.empty())
++        {
++            const auto now = std::chrono::steady_clock::now();
++            for (auto it = _recentDisconnects.begin(); it != _recentDisconnects.end();)
++            {
++                if (now - it->second > std::chrono::minutes(2))
++                    it = _recentDisconnects.erase(it);
++                else
++                    ++it;
++            }
++            _recentDisconnects[connection_player->keyHash] = now;
++        }
++
+         player_list.erase(
+             std::remove_if(
+                 player_list.begin(), player_list.end(),
+@@ -2686,6 +2712,9 @@
+ 
+     void NetworkBase::ServerHandleAuth(Connection& connection, Packet& packet)
+     {
++        if (connection.pendingRejoin)
++            return;
++
+         if (connection.authStatus != Auth::ok)
+         {
+             auto* hostName = connection.socket->GetHostName();
+@@ -2790,7 +2819,10 @@
+                 }
+             }
+ 
+-            if (GetNumVisiblePlayers() >= Config::Get().network.maxplayers)
++            const auto pendingRejoins = std::count_if(
++                client_connection_list.begin(), client_connection_list.end(),
++                [](const auto& client) { return client->pendingRejoin; });
++            if (GetNumVisiblePlayers() + pendingRejoins >= Config::Get().network.maxplayers)
+             {
+                 connection.authStatus = Auth::full;
+                 LOG_INFO("Connection %s: Server is full.", hostName);
+@@ -2800,6 +2832,20 @@
+                 const std::string hash = connection.key.PublicKeyHash();
+                 if (ProcessPlayerAuthenticatePluginHooks(connection, name, hash))
+                 {
++                    const auto now = std::chrono::steady_clock::now();
++                    const auto lastDisconnect = _recentDisconnects.find(hash);
++                    if (lastDisconnect != _recentDisconnects.end()
++                        && now - lastDisconnect->second <= std::chrono::minutes(2))
++                    {
++                        connection.pendingRejoin = true;
++                        connection.rejoinReadyTime = now + std::chrono::seconds(5);
++                        connection.pendingPlayerName = name;
++                        connection.pendingPlayerKeyHash = hash;
++                        return;
++                    }
++                    if (lastDisconnect != _recentDisconnects.end())
++                        _recentDisconnects.erase(lastDisconnect);
++
+                     connection.authStatus = Auth::ok;
+                     ServerClientJoined(name, hash, connection);
+                 }
+--- a/src/openrct2/network/NetworkBase.h
++++ b/src/openrct2/network/NetworkBase.h
+@@ -10,8 +10,10 @@
+ #include "NetworkUser.h"
+ 
+ #include <fstream>
++#include <chrono>
+ #include <list>
+ #include <memory>
++#include <unordered_map>
+ 
+ #ifndef DISABLE_NETWORK
+ 
+@@ -204,6 +206,7 @@
+         std::unique_ptr<ITcpSocket> _listenSocket;
+         std::unique_ptr<INetworkServerAdvertiser> _advertiser;
+         std::list<std::unique_ptr<Connection>> client_connection_list;
++        std::unordered_map<std::string, std::chrono::steady_clock::time_point> _recentDisconnects;
+         std::string _serverLogPath;
+         std::string _serverLogFilenameFormat = "%Y%m%d-%H%M%S.txt";
+         std::ofstream _server_log_fs;
+--- a/src/openrct2/network/NetworkConnection.h
++++ b/src/openrct2/network/NetworkConnection.h
+@@ -17,6 +17,7 @@
+     #include "Socket.h"
+ 
+     #include <memory>
++    #include <chrono>
+     #include <string_view>
+     #include <vector>
+ 
+@@ -42,6 +43,10 @@
+         std::vector<uint8_t> challenge;
+         std::vector<const ObjectRepositoryItem*> requestedObjects;
+         bool shouldDisconnect = false;
++        bool pendingRejoin = false;
++        std::chrono::steady_clock::time_point rejoinReadyTime{};
++        std::string pendingPlayerName;
++        std::string pendingPlayerKeyHash;
+ 
+         Connection() noexcept;
+ 

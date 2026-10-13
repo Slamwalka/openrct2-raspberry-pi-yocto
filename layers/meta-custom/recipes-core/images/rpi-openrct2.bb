@@ -1,6 +1,7 @@
 require recipes-core/images/core-image-minimal.bb
 
 DESCRIPTION = "Pi image for OpenRCT2 + WireGuard"
+RPI_OPENRCT2_TIMEZONE ?= "Europe/Busingen"
 
 DISTRO_FEATURES:append = " x11"
 IMAGE_FEATURES += "ssh-server-openssh package-management"
@@ -38,6 +39,8 @@ IMAGE_INSTALL:append = " \
     rpi-openrct2-runtime \
     cifs-utils \
     kernel-module-cifs \
+    tzdata-core \
+    tzdata-europe \
     nano \
     openrct2 \
 "
@@ -59,6 +62,11 @@ do_custom_setup() {
     install -d ${IMAGE_ROOTFS}/etc/systemd/system/multi-user.target.wants
     ln -sf /etc/systemd/system/resize-rootfs.service ${IMAGE_ROOTFS}/etc/systemd/system/multi-user.target.wants/resize-rootfs.service
     echo "rpi-openrct2" > ${IMAGE_ROOTFS}/etc/hostname
+
+    # Local timezone
+    [ -e ${IMAGE_ROOTFS}${datadir}/zoneinfo/${RPI_OPENRCT2_TIMEZONE} ] || { echo "Unknown timezone: ${RPI_OPENRCT2_TIMEZONE}" >&2; exit 1; }
+    ln -sfn /usr/share/zoneinfo/${RPI_OPENRCT2_TIMEZONE} ${IMAGE_ROOTFS}/etc/localtime
+    printf '%s\n' ${RPI_OPENRCT2_TIMEZONE} > ${IMAGE_ROOTFS}/etc/timezone
 }
 do_custom_setup[fakeroot] = "1"
 addtask do_custom_setup after do_rootfs before do_image

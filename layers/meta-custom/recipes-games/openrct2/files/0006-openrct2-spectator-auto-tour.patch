@@ -1,0 +1,199 @@
+Upstream-Status: Inappropriate [project-specific spectator kiosk camera]
+
+--- a/src/openrct2/config/Config.h
++++ b/src/openrct2/config/Config.h
+@@ -41,6 +41,10 @@
+         int32_t fullscreenHeight;
+         int32_t displayRotation;
+         u8string screenSaverBacklightPath;
++        bool spectatorAutoTour;
++        int32_t spectatorAutoTourMinInterval;
++        int32_t spectatorAutoTourMaxInterval;
++        int32_t spectatorAutoTourIdleSeconds;
+         float windowScale;
+         bool inferDisplayDPI;
+         ::DrawingEngine drawingEngine;
+--- a/src/openrct2/config/Config.cpp
++++ b/src/openrct2/config/Config.cpp
+@@ -198,6 +198,10 @@
+             model->fullscreenWidth = reader->GetInt32("fullscreen_width", -1);
+             model->displayRotation = reader->GetInt32("display_rotation", 0);
+             model->screenSaverBacklightPath = reader->GetString("screen_saver_backlight_path", "");
++            model->spectatorAutoTour = reader->GetBoolean("spectator_auto_tour", false);
++            model->spectatorAutoTourMinInterval = reader->GetInt32("spectator_auto_tour_min_interval", 18);
++            model->spectatorAutoTourMaxInterval = reader->GetInt32("spectator_auto_tour_max_interval", 42);
++            model->spectatorAutoTourIdleSeconds = reader->GetInt32("spectator_auto_tour_idle_seconds", 30);
+             model->rct1Path = reader->GetString("rct1_path", "");
+             model->rct2Path = reader->GetString("game_path", "");
+             model->landscapeSmoothing = reader->GetBoolean("landscape_smoothing", true);
+@@ -311,6 +315,10 @@
+         writer->WriteInt32("fullscreen_width", model->fullscreenWidth);
+         writer->WriteInt32("display_rotation", model->displayRotation);
+         writer->WriteString("screen_saver_backlight_path", model->screenSaverBacklightPath);
++        writer->WriteBoolean("spectator_auto_tour", model->spectatorAutoTour);
++        writer->WriteInt32("spectator_auto_tour_min_interval", model->spectatorAutoTourMinInterval);
++        writer->WriteInt32("spectator_auto_tour_max_interval", model->spectatorAutoTourMaxInterval);
++        writer->WriteInt32("spectator_auto_tour_idle_seconds", model->spectatorAutoTourIdleSeconds);
+         writer->WriteString("rct1_path", model->rct1Path);
+         writer->WriteString("game_path", model->rct2Path);
+         writer->WriteBoolean("landscape_smoothing", model->landscapeSmoothing);
+--- a/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
++++ b/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
+@@ -16,8 +16,10 @@
+ #include <cmath>
+ #include <fstream>
+ #include <memory>
++#include <random>
+ #include <openrct2/Diagnostic.h>
+ #include <openrct2/Game.h>
++#include <openrct2/GameState.h>
+ #include <openrct2/Input.h>
+ #include <openrct2/config/Config.h>
+ #include <openrct2/core/Guard.hpp>
+@@ -25,9 +27,13 @@
+ #include <openrct2/drawing/LightFX.h>
+ #include <openrct2/drawing/X8DrawingEngine.h>
+ #include <openrct2/interface/Window.h>
++#include <openrct2/interface/WindowBase.h>
+ #include <openrct2/network/Network.h>
+ #include <openrct2/paint/Paint.h>
++#include <openrct2/ride/RideManager.hpp>
+ #include <openrct2/ui/UiContext.h>
++#include <openrct2/world/Map.h>
++#include <openrct2/world/tile_element/SurfaceElement.h>
+ #include <vector>
+ 
+ using namespace OpenRCT2;
+@@ -57,6 +63,15 @@
+     bool _pauseSaverDismissed = false;
+     bool _backlightBlanked = false;
+     int32_t _restoreBacklightBrightness = 0;
++    bool _spectatorTourInitialized = false;
++    bool _spectatorTourHasCursor = false;
++    int32_t _spectatorTourCursorX = 0;
++    int32_t _spectatorTourCursorY = 0;
++    int32_t _spectatorTourWheel = 0;
++    int32_t _lastSpectatorTourTarget = -1;
++    std::chrono::steady_clock::time_point _spectatorTourLastInput{};
++    std::chrono::steady_clock::time_point _spectatorTourNextMove{};
++    std::mt19937 _spectatorTourRandom{ std::random_device{}() };
+ 
+     std::vector<uint32_t> _dirtyVisualsTime;
+ 
+@@ -288,6 +303,108 @@
+         }
+     }
+ 
++    std::chrono::seconds GetSpectatorTourInterval()
++    {
++        const auto& general = Config::Get().general;
++        const auto minimum = std::clamp(general.spectatorAutoTourMinInterval, 5, 600);
++        const auto maximum = std::clamp(general.spectatorAutoTourMaxInterval, minimum, 600);
++        std::uniform_int_distribution<int32_t> interval(minimum, maximum);
++        return std::chrono::seconds(interval(_spectatorTourRandom));
++    }
++
++    void UpdateSpectatorAutoTour()
++    {
++        if (!Config::Get().general.spectatorAutoTour || Network::GetMode() != Network::Mode::client
++            || Network::GetStatus() != Network::Status::connected)
++        {
++            _spectatorTourInitialized = false;
++            _spectatorTourHasCursor = false;
++            _lastSpectatorTourTarget = -1;
++            return;
++        }
++
++        auto* window = WindowGetMain();
++        if (window == nullptr || window->viewport == nullptr)
++        {
++            return;
++        }
++
++        const auto now = std::chrono::steady_clock::now();
++        const auto* cursor = _uiContext.GetCursorState();
++        if (!_spectatorTourInitialized)
++        {
++            _spectatorTourInitialized = true;
++            _spectatorTourLastInput = now;
++            _spectatorTourNextMove = now + GetSpectatorTourInterval();
++            if (cursor != nullptr)
++            {
++                _spectatorTourHasCursor = true;
++                _spectatorTourCursorX = cursor->position.x;
++                _spectatorTourCursorY = cursor->position.y;
++                _spectatorTourWheel = cursor->wheel;
++            }
++            return;
++        }
++
++        bool userInput = false;
++        if (cursor != nullptr)
++        {
++            userInput = !_spectatorTourHasCursor || cursor->position.x != _spectatorTourCursorX
++                || cursor->position.y != _spectatorTourCursorY || cursor->wheel != _spectatorTourWheel
++                || ((cursor->left | cursor->middle | cursor->right) & CURSOR_CHANGED) != 0;
++            _spectatorTourHasCursor = true;
++            _spectatorTourCursorX = cursor->position.x;
++            _spectatorTourCursorY = cursor->position.y;
++            _spectatorTourWheel = cursor->wheel;
++        }
++
++        const auto idleSeconds = std::clamp(Config::Get().general.spectatorAutoTourIdleSeconds, 5, 600);
++        if (userInput)
++        {
++            _spectatorTourLastInput = now;
++            _spectatorTourNextMove = now + std::chrono::seconds(idleSeconds);
++            return;
++        }
++
++        if (now - _spectatorTourLastInput < std::chrono::seconds(idleSeconds) || now < _spectatorTourNextMove)
++        {
++            return;
++        }
++
++        std::vector<CoordsXYZ> targets;
++        for (const auto& ride : RideManager(getGameState()))
++        {
++            if (ride.overallView.isNull() || !MapIsLocationInPark(ride.overallView))
++            {
++                continue;
++            }
++            const auto* surface = MapGetSurfaceElementAt(ride.overallView);
++            if (surface != nullptr)
++            {
++                targets.emplace_back(ride.overallView, surface->getBaseZ());
++            }
++        }
++
++        if (targets.empty())
++        {
++            _spectatorTourNextMove = now + GetSpectatorTourInterval();
++            return;
++        }
++
++        std::uniform_int_distribution<int32_t> targetDistribution(0, static_cast<int32_t>(targets.size()) - 1);
++        auto targetIndex = targetDistribution(_spectatorTourRandom);
++        if (targets.size() > 1 && targetIndex == _lastSpectatorTourTarget)
++        {
++            targetIndex = (targetIndex + 1) % static_cast<int32_t>(targets.size());
++        }
++
++        std::uniform_int_distribution<int32_t> zoomDistribution(-1, 2);
++        WindowZoomSet(*window, ZoomLevel{ static_cast<int8_t>(zoomDistribution(_spectatorTourRandom)) }, false);
++        WindowScrollToLocation(*window, targets[targetIndex]);
++        _lastSpectatorTourTarget = targetIndex;
++        _spectatorTourNextMove = now + GetSpectatorTourInterval();
++    }
++
+     void Display()
+     {
+         bool blankForPausedServer = false;
+@@ -328,6 +445,7 @@
+             return;
+         }
+ 
++        UpdateSpectatorAutoTour();
+         auto* viewport = WindowGetViewport(WindowGetMain());
+ 
+         if (Config::Get().general.enableLightFx && viewport != nullptr)

@@ -1,0 +1,75 @@
+Upstream-Status: Inappropriate [project-specific kiosk backlight control]
+
+--- a/src/openrct2/config/Config.h
++++ b/src/openrct2/config/Config.h
+@@ -39,6 +39,7 @@
+         int32_t fullscreenWidth;
+         int32_t fullscreenHeight;
+         int32_t displayRotation;
++        u8string screenSaverBacklightPath;
+         float windowScale;
+         bool inferDisplayDPI;
+         ::DrawingEngine drawingEngine;
+--- a/src/openrct2/config/Config.cpp
++++ b/src/openrct2/config/Config.cpp
+@@ -198,5 +198,6 @@
+             model->fullscreenWidth = reader->GetInt32("fullscreen_width", -1);
+             model->displayRotation = reader->GetInt32("display_rotation", 0);
++            model->screenSaverBacklightPath = reader->GetString("screen_saver_backlight_path", "");
+             model->rct1Path = reader->GetString("rct1_path", "");
+             model->rct2Path = reader->GetString("game_path", "");
+             model->landscapeSmoothing = reader->GetBoolean("landscape_smoothing", true);
+@@ -309,5 +310,6 @@
+         writer->WriteInt32("fullscreen_width", model->fullscreenWidth);
+         writer->WriteInt32("display_rotation", model->displayRotation);
++        writer->WriteString("screen_saver_backlight_path", model->screenSaverBacklightPath);
+         writer->WriteString("rct1_path", model->rct1Path);
+         writer->WriteString("game_path", model->rct2Path);
+         writer->WriteBoolean("landscape_smoothing", model->landscapeSmoothing);
+--- a/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
++++ b/src/openrct2-ui/drawing/engines/HardwareDisplayDrawingEngine.cpp
+@@ -16,0 +17,1 @@
++#include <fstream>
+@@ -56,0 +58,2 @@
++    bool _backlightBlanked = false;
++    int32_t _restoreBacklightBrightness = 0;
+@@ -71,0 +75,1 @@
++        SetBacklightBlanked(false);
+@@ -256,3 +260,34 @@
++    void SetBacklightBlanked(bool blanked)
++    {
++        const auto& backlightPath = Config::Get().general.screenSaverBacklightPath;
++        if (backlightPath.empty() || blanked == _backlightBlanked)
++        {
++            return;
++        }
++
++        if (blanked)
++        {
++            std::ifstream currentBrightness(backlightPath);
++            if (!(currentBrightness >> _restoreBacklightBrightness))
++            {
++                return;
++            }
++
++            std::ofstream backlight(backlightPath);
++            if (backlight << 0)
++            {
++                _backlightBlanked = true;
++            }
++            return;
++        }
++
++        std::ofstream backlight(backlightPath);
++        if (backlight << _restoreBacklightBrightness)
++        {
++            _backlightBlanked = false;
++        }
++    }
++
+     void Display()
+     {
+         bool blankForPausedServer = false;
+@@ -287,1 +322,2 @@
++        SetBacklightBlanked(blankForPausedServer);
+         if (blankForPausedServer)
