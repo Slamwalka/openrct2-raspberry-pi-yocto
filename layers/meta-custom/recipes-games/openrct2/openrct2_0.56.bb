@@ -19,6 +19,8 @@ SRC_URI = "git://github.com/OpenRCT2/OpenRCT2.git;protocol=https;nobranch=1 \
     file://0011-openrct2-hide-idle-touch-cursor.patch \
     file://0012-openrct2-freeze-effects-during-auto-pause.patch \
     file://0013-openrct2-time-double-tap-from-release.patch \
+    file://0014-openrct2-use-touch-coordinates-for-drag.patch \
+    file://0015-openrct2-preserve-x11-touch-window-coordinates.patch \
     file://g2.dat \
     file://fonts.dat \
     file://palettes.dat \

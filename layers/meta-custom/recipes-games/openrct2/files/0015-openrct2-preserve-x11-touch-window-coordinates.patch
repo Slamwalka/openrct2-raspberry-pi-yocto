@@ -1,0 +1,21 @@
+Subject: Preserve X11 touchscreen window coordinates
+
+XInput2 finger events and SDL touch mouse events already use the same window
+coordinates. Applying display rotation again moves toolbar taps into the map.
+Keep the existing rotation compensation for non-X11 video drivers.
+
+Upstream-Status: Inappropriate [depends on local display rotation]
+
+--- a/src/openrct2-ui/UiContext.cpp
++++ b/src/openrct2-ui/UiContext.cpp
+@@ -67,7 +67,9 @@
+ static ScreenCoordsXY GetTouchScreenPosition(const SDL_TouchFingerEvent& event, int32_t width, int32_t height)
+ {
+     ScreenCoordsXY position = { static_cast<int32_t>(event.x * width), static_cast<int32_t>(event.y * height) };
+-    if (Config::Get().general.displayRotation == 180)
++    const auto* videoDriver = SDL_GetCurrentVideoDriver();
++    if (Config::Get().general.displayRotation == 180
++        && (videoDriver == nullptr || SDL_strcmp(videoDriver, "x11") != 0))
+     {
+         position.x = width - 1 - position.x;
+         position.y = height - 1 - position.y;

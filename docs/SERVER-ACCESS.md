@@ -41,6 +41,8 @@ Damit haben wir stärkere Praxisevidenz für normale Spielaktionen unter realer 
 
 Die dazugehörige Upstream-Frage haben wir in [OpenRCT2 #27285](https://github.com/OpenRCT2/OpenRCT2/issues/27285) gestellt.
 
+Nachtrag vom 13.10.2026, 20:22 CEST: `openrct2.service` war aktiv und lief seit 19:36:37 CEST. Der neueste lokale Desync-Bericht war weiterhin von 11:51:37; seit dem Neustart wurde auf dem Pi kein neuer Bericht angelegt. Das bestätigt rund 45 Minuten stabilen Betrieb seit diesem Prozessstart.
+
 ### Sicheres Wartungsfenster
 
 Vor einem Serverneustart müssen alle echten Spielclients getrennt sein; den lokalen Spectator in Gruppe 1 nicht als Spieler zählen. Eine nicht-lokale `ESTABLISHED`-Verbindung auf TCP-Port `11753` ist ein konservativer Grund zu warten. Ein Leave-Eintrag allein beweist nicht, dass keine andere Sitzung verbunden ist.

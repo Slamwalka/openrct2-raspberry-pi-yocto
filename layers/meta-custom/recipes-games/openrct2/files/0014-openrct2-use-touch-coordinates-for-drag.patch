@@ -1,0 +1,51 @@
+Subject: Use finger coordinates for touchscreen viewport dragging
+
+Viewport dragging reads the SDL mouse position, which can remain stale when
+the right button is synthesized from a double tap. Return the finger position
+in physical pixels and ignore synthetic touch mouse motion. Update the touch
+position on press and release as well as motion.
+
+Upstream-Status: Pending
+
+--- a/src/openrct2-ui/UiContext.cpp
++++ b/src/openrct2-ui/UiContext.cpp
+@@ -300,6 +300,12 @@
+ 
+     ScreenCoordsXY GetCursorPosition() override
+     {
++        if (_cursorState.touch)
++        {
++            const auto windowScale = Config::Get().general.windowScale;
++            return { static_cast<int32_t>(_cursorState.position.x * windowScale),
++                     static_cast<int32_t>(_cursorState.position.y * windowScale) };
++        }
+         ScreenCoordsXY cursorPosition;
+         SDL_GetMouseState(&cursorPosition.x, &cursorPosition.y);
+         return cursorPosition;
+@@ -411,6 +417,10 @@
+                     }
+                     break;
+                 case SDL_MOUSEMOTION:
++                    if (e.motion.which == SDL_TOUCH_MOUSEID)
++                    {
++                        break;
++                    }
+                     _cursorState.position = { static_cast<int32_t>(e.motion.x / Config::Get().general.windowScale),
+                                               static_cast<int32_t>(e.motion.y / Config::Get().general.windowScale) };
+                     break;
+@@ -505,6 +515,7 @@
+                 case SDL_FINGERDOWN:
+                 {
+                     ScreenCoordsXY fingerPos = GetTouchScreenPosition(e.tfinger, _width, _height);
++                    _cursorState.position = fingerPos;
+ 
+                     _cursorState.touchIsDouble = _cursorState.touchHasPreviousTap
+                         && e.tfinger.timestamp - _cursorState.touchUpTimestamp < kTouchDoubleTimeout;
+@@ -530,6 +541,7 @@
+                 case SDL_FINGERUP:
+                 {
+                     ScreenCoordsXY fingerPos = GetTouchScreenPosition(e.tfinger, _width, _height);
++                    _cursorState.position = fingerPos;
+ 
+                     if (_cursorState.touchIsDouble)
+                     {
